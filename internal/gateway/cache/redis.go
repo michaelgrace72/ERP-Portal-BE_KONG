@@ -59,3 +59,8 @@ func (r *RedisService) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	return res > 0, nil
 }
+
+// GetClient returns the underlying Redis client
+func (r *RedisService) GetClient() *redis.Client {
+	return r.client
+}

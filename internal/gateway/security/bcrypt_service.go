@@ -21,3 +21,8 @@ func (p *BcryptService) HashPassword(password string) (string, error) {
 func (p *BcryptService) ValidatePassword(password, hashedPassword string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 }
+
+// ComparePassword compares a plain password with a hashed password
+func (p *BcryptService) ComparePassword(hashedPassword, password string) error {
+	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+}

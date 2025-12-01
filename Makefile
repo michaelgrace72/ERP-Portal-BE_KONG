@@ -66,6 +66,20 @@ migrate-create: ## Create a new migration file (usage: make migrate-create NAME=
 	@echo "Creating migration: $(NAME)"
 	@go run cmd/migrate/main.go create $(NAME)
 
+# Seeder commands
+seed: ## Run database seeders (roles and permissions)
+	@echo "Running database seeders..."
+	@go run cmd/seed/main.go cmd/seed/copy_roles.go
+
+copy-roles: ## Copy system roles to a tenant (usage: make copy-roles TENANT_ID=1)
+	@if [ -z "$(TENANT_ID)" ]; then \
+		echo "Error: TENANT_ID is required"; \
+		echo "Usage: make copy-roles TENANT_ID=1"; \
+		exit 1; \
+	fi
+	@echo "Copying system roles to tenant $(TENANT_ID)..."
+	@go run cmd/copy-roles/main.go --tenant-id=$(TENANT_ID)
+
 # Legacy GORM migration commands (for development)
 migrate-legacy-up: ## Run GORM auto-migrations (development only)
 	@echo "Running GORM migrations..."

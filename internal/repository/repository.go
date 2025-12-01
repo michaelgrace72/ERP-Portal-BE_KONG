@@ -49,7 +49,7 @@ func (r *BaseRepository[T]) FindAll(ctx context.Context, limit, offset int, quer
 		return nil, 0, err
 	}
 
-	if err := q.Limit(limit).Offset(offset).Order("pkid asc").Find(&entities).Error; err != nil {
+	if err := q.Limit(limit).Offset(offset).Order("id asc").Find(&entities).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -61,7 +61,7 @@ func (r *BaseRepository[T]) FindByID(ctx context.Context, id any) (*T, error) {
 
 	q := r.db.WithContext(ctx)
 
-	if err := q.Where("pkid = ?", id).Take(&entity).Error; err != nil {
+	if err := q.Where("id = ?", id).Take(&entity).Error; err != nil {
 		return nil, err
 	}
 
@@ -85,7 +85,7 @@ func (r *BaseRepository[T]) Where(ctx context.Context, query any, args ...any) (
 
 	q := r.db.WithContext(ctx)
 
-	if err := q.Where(query, args...).Order("pkid asc").Find(&entities).Error; err != nil {
+	if err := q.Where(query, args...).Order("id asc").Find(&entities).Error; err != nil {
 		return nil, err
 	}
 	return entities, nil
@@ -160,7 +160,7 @@ func (r *BaseRepository[T]) BulkCreate(ctx context.Context, entities []*T) ([]*T
 	return entities, nil
 }
 
-func (r *BaseRepository[T]) Update(ctx context.Context, entity *T, pkid any) (*T, error) {
+func (r *BaseRepository[T]) Update(ctx context.Context, entity *T, id any) (*T, error) {
 	tx := r.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -172,7 +172,7 @@ func (r *BaseRepository[T]) Update(ctx context.Context, entity *T, pkid any) (*T
 		}
 	}()
 
-	if err := tx.Model(entity).Where("pkid = ?", pkid).Updates(entity).Error; err != nil {
+	if err := tx.Model(entity).Where("id = ?", id).Updates(entity).Error; err != nil {
 		tx.Rollback()
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (r *BaseRepository[T]) Update(ctx context.Context, entity *T, pkid any) (*T
 		return nil, err
 	}
 
-	result, err := r.FindByID(ctx, pkid)
+	result, err := r.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -189,16 +189,16 @@ func (r *BaseRepository[T]) Update(ctx context.Context, entity *T, pkid any) (*T
 	return result, nil
 }
 
-func (r *BaseRepository[T]) Delete(ctx context.Context, pkid any) error {
-	if err := r.db.WithContext(ctx).Delete(new(T), "pkid = ?", pkid).Error; err != nil {
+func (r *BaseRepository[T]) Delete(ctx context.Context, id any) error {
+	if err := r.db.WithContext(ctx).Delete(new(T), "id = ?", id).Error; err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *BaseRepository[T]) BulkDelete(ctx context.Context, pkids []any) error {
-	if len(pkids) == 0 {
+func (r *BaseRepository[T]) BulkDelete(ctx context.Context, ids []any) error {
+	if len(ids) == 0 {
 		return nil
 	}
 
@@ -213,7 +213,7 @@ func (r *BaseRepository[T]) BulkDelete(ctx context.Context, pkids []any) error {
 		}
 	}()
 
-	if err := tx.Where("pkid IN ?", pkids).Delete(new(T)).Error; err != nil {
+	if err := tx.Where("id IN ?", ids).Delete(new(T)).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -225,8 +225,8 @@ func (r *BaseRepository[T]) BulkDelete(ctx context.Context, pkids []any) error {
 	return nil
 }
 
-func (r *BaseRepository[T]) SoftDelete(ctx context.Context, pkid any) error {
-	if err := r.db.WithContext(ctx).Model(new(T)).Where("pkid = ?", pkid).Update("is_deleted", true).Error; err != nil {
+func (r *BaseRepository[T]) SoftDelete(ctx context.Context, id any) error {
+	if err := r.db.WithContext(ctx).Model(new(T)).Where("id = ?", id).Update("is_deleted", true).Error; err != nil {
 		return err
 	}
 

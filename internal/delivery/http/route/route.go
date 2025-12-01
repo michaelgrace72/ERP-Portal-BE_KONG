@@ -13,6 +13,8 @@ func SetupRoutes(
 	userHandler *http.UserHandler,
 	oauthHandler *http.OAuthHandler,
 	registrationHandler *http.RegistrationHandler,
+	authHandler *http.AuthHandler,
+	userManagementHandler *http.UserManagementHandler,
 	jwtService *security.JWTService,
 ) {
 	// Setup handlers
@@ -27,8 +29,20 @@ func SetupRoutes(
 		// Public routes (auth)
 		auth := api.Group("/auth")
 		{
+			// Legacy JWT-based login (keep for backward compatibility)
 			auth.POST("/login", userHandler.Login)
-			auth.POST("/register", registrationHandler.RegisterWithTenant) // Updated to use new registration handler
+			
+			// New phantom token authentication endpoints
+			auth.POST("/phantom-login", authHandler.Login)
+			auth.POST("/select-tenant", authHandler.SelectTenant)
+			auth.POST("/logout", authHandler.Logout)
+			auth.POST("/refresh", authHandler.RefreshSession)
+			auth.GET("/session", authHandler.GetSession)
+			
+			// Registration
+			auth.POST("/register", registrationHandler.RegisterWithTenant)
+			
+			// Other auth endpoints
 			auth.POST("/refresh-token", userHandler.RefreshToken)
 			auth.POST("/verify-email", userHandler.VerifyEmail)
 			auth.POST("/reset-password", userHandler.ResetPassword)
@@ -54,12 +68,36 @@ func SetupRoutes(
 		users := api.Group("/users")
 		users.Use(authMiddleware.RequireAuth())
 		{
+			// User management - Get own profile
+			users.GET("/me", userManagementHandler.GetMyProfile)
+			
+			// Admin: Create user (for invitation)
+			users.POST("", userManagementHandler.CreateUser)
+			
+			// Legacy user endpoints
 			users.GET("", userHandler.GetAllUsers)
 			users.GET("/:code", userHandler.GetUserByCode)
-			users.POST("", userHandler.CreateUser)
 			users.PUT("/:code", userHandler.UpdateUser)
 			users.PUT("/:code/change-status", userHandler.ChangeStatus)
 			users.DELETE("/:code", userHandler.DeleteUser)
+		}
+
+		// Membership management
+		memberships := api.Group("/memberships")
+		memberships.Use(authMiddleware.RequireAuth())
+		{
+			memberships.POST("", userManagementHandler.AssignUserToTenant)
+			memberships.DELETE("", userManagementHandler.RemoveUserFromTenant)
+			memberships.PUT("/:id/role", userManagementHandler.UpdateUserRole)
+		}
+
+		// Tenant management
+		tenants := api.Group("/tenants")
+		tenants.Use(authMiddleware.RequireAuth())
+		{
+			tenants.GET("/:id/members", userManagementHandler.GetTenantMembers)
+			tenants.GET("/:id/roles", userManagementHandler.GetTenantRoles)
+			tenants.PUT("/:id", userManagementHandler.UpdateTenant)
 		}
 	}
 

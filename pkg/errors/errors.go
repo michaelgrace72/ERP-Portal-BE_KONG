@@ -62,4 +62,10 @@ var (
 	ErrTenantNotFound         = errors.New("tenant not found")
 	ErrTenantAlreadyExists    = errors.New("tenant already exists")
 	ErrTenantSlugExists       = errors.New("tenant slug already exists")
+	
+	// Authentication errors
+	ErrInvalidCredentials     = errors.New("invalid email or password")
+	ErrUserInactive           = errors.New("user account is inactive")
+	ErrSessionNotFound        = errors.New("session not found or expired")
+	ErrSessionExpired         = errors.New("session has expired")
 )

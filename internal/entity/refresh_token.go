@@ -3,13 +3,13 @@ package entity
 import "time"
 
 type RefreshToken struct {
-	PKID      int64     `gorm:"primaryKey;autoIncrement;column:pkid"`
-	UserPKID  int64     `gorm:"not null;column:user_pkid"`
+	ID        int64     `gorm:"primaryKey;autoIncrement;column:id"`
+	UserID    int64     `gorm:"not null;column:user_id"`
 	Token     string    `gorm:"not null;unique"`
 	ExpiryAt  time.Time `gorm:"not null;type:timestamp"`
 	IsRevoked bool      `gorm:"default:false;not null"`
 
-	User User `gorm:"foreignKey:UserPKID;references:PKID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	User User `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	Audit
 }
@@ -20,7 +20,7 @@ func (RefreshToken) TableName() string {
 
 func NewRefreshToken(userID int64, token string, expiryAt time.Time, isRevoked bool, user User) *RefreshToken {
 	return &RefreshToken{
-		UserPKID:  userID,
+		UserID:    userID,
 		Token:     token,
 		ExpiryAt:  expiryAt,
 		IsRevoked: isRevoked,
@@ -29,11 +29,11 @@ func NewRefreshToken(userID int64, token string, expiryAt time.Time, isRevoked b
 }
 
 func (rf *RefreshToken) GetID() int64 {
-	return rf.PKID
+	return rf.ID
 }
 
 func (rf *RefreshToken) GetUserID() int64 {
-	return rf.UserPKID
+	return rf.UserID
 }
 
 func (rf *RefreshToken) GetToken() string {

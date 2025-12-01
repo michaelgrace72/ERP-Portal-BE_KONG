@@ -1,6 +1,8 @@
 package entity
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -106,10 +108,24 @@ func (u *User) IsOAuthUser() bool {
 	return u.OAuthProvider != "" && u.OAuthID != ""
 }
 
-// BeforeCreate hook to generate UUID before creating the user
+// BeforeCreate hook to generate UUID and Code before creating the user
 func (u *User) BeforeCreate(tx *gorm.DB) error {
+	// Generate UUID if not set
 	if u.UUID == "" {
 		u.UUID = uuid.New().String()
 	}
+	
+	// Generate user code if not set
+	if u.Code == "" {
+		// Get the next ID from the sequence
+		var nextID int64
+		if err := tx.Raw("SELECT nextval('users_id_seq')").Scan(&nextID).Error; err != nil {
+			return err
+		}
+		
+		// Format: USR00000001 (USR + 8 digits = 11 characters total)
+		u.Code = fmt.Sprintf("USR%08d", nextID)
+	}
+	
 	return nil
 }

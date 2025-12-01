@@ -4,14 +4,13 @@ import "time"
 
 // Tenant represents a company/organization in the multi-tenant system
 type Tenant struct {
-	ID        int64     `gorm:"primaryKey;autoIncrement;column:id"`
-	Name      string    `gorm:"type:varchar(100);uniqueIndex;not null"`
-	Slug      string    `gorm:"type:varchar(100);uniqueIndex;not null"` // URL-friendly identifier
-	Domain    string    `gorm:"type:varchar(100);uniqueIndex"`          // Optional custom domain
-	Config    string    `gorm:"type:jsonb;default:'{}'"`                // Tenant-specific configurations
-	IsActive  bool      `gorm:"default:true;not null"`
-	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
-	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
+	ID        int64      `gorm:"primaryKey;autoIncrement;column:id"`
+	Name      string     `gorm:"type:varchar(100);uniqueIndex;not null"`
+	Slug      string     `gorm:"type:varchar(100);uniqueIndex;not null"` // URL-friendly identifier
+	Config    string     `gorm:"type:jsonb;default:'{}'"`                // Tenant-specific configurations
+	IsActive  bool       `gorm:"default:true;not null"`
+	CreatedAt time.Time  `gorm:"default:CURRENT_TIMESTAMP"`
+	UpdatedAt time.Time  `gorm:"default:CURRENT_TIMESTAMP"`
 	DeletedAt *time.Time
 	IsDeleted bool `gorm:"default:false;not null"`
 
@@ -57,4 +56,22 @@ type Membership struct {
 
 func (Membership) TableName() string {
 	return "memberships"
+}
+
+// Permission represents a granular permission for a role
+type Permission struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement;column:id"`
+	RoleID    int64     `gorm:"not null;index:idx_permissions_role_id"`
+	Resource  string    `gorm:"type:varchar(100);not null;index:idx_permissions_resource"`
+	Action    string    `gorm:"type:varchar(50);not null"`
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
+	DeletedAt *time.Time
+
+	// Relations
+	Role *TenantRole `gorm:"foreignKey:RoleID;references:ID"`
+}
+
+func (Permission) TableName() string {
+	return "permissions"
 }

@@ -25,7 +25,6 @@ type TenantInfo struct {
 	ID       int64  `json:"id"`
 	Name     string `json:"name"`
 	Slug     string `json:"slug"`
-	Domain   string `json:"domain,omitempty"`
 	IsActive bool   `json:"is_active"`
 }
 

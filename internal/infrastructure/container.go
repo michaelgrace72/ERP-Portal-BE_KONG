@@ -7,20 +7,24 @@ import (
 	"go-gin-clean/internal/gateway/media"
 	"go-gin-clean/internal/gateway/messaging"
 	"go-gin-clean/internal/gateway/security"
+	"go-gin-clean/internal/gateway/session"
 	"go-gin-clean/internal/repository"
 	"go-gin-clean/internal/usecase"
 	"go-gin-clean/pkg/config"
+	"time"
 
 	"github.com/rabbitmq/amqp091-go"
 	"gorm.io/gorm"
 )
 
 type Container struct {
-	UserHandler         http.UserHandler
-	OauthHandler        http.OAuthHandler
-	RegistrationHandler http.RegistrationHandler
-	JWTService          security.JWTService
-	OAuthService        security.OAuthService
+	UserHandler             http.UserHandler
+	OauthHandler            http.OAuthHandler
+	RegistrationHandler     http.RegistrationHandler
+	AuthHandler             http.AuthHandler
+	UserManagementHandler   http.UserManagementHandler
+	JWTService              security.JWTService
+	OAuthService            security.OAuthService
 }
 
 func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Container {
@@ -30,6 +34,7 @@ func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Contain
 	tenantRepo := repository.NewTenantRepository(db)
 	tenantRoleRepo := repository.NewTenantRoleRepository(db)
 	membershipRepo := repository.NewMembershipRepository(db)
+	permissionRepo := repository.NewPermissionRepository(db)
 
 	// Init services
 	jwtService := security.NewJWTService(&cfg.JWT)
@@ -42,6 +47,10 @@ func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Contain
 	
 	// Init Kong client
 	kongClient := kong.NewKongAdminClient(cfg.Kong.AdminURL, cfg.Kong.Timeout)
+	
+	// Init session service
+	sessionTTL := 30 * time.Minute // 30 minutes session expiration
+	sessionService := session.NewSessionService(redisService.GetClient(), sessionTTL)
 
 	// init message publisher
 	userPublisher := messaging.NewUserPublisher(ch)
@@ -49,17 +58,23 @@ func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Contain
 	// Init use cases
 	userUseCase := usecase.NewUserUseCase(userRepo, refreshTokenRepo, jwtService, passwordService, oauthService, aesService, cloudinaryService, localStorageService, redisService, userPublisher)
 	registrationUseCase := usecase.NewRegistrationUseCase(db, userRepo, tenantRepo, tenantRoleRepo, membershipRepo, passwordService, kongClient)
+	authUseCase := usecase.NewAuthUseCase(userRepo, membershipRepo, tenantRepo, tenantRoleRepo, permissionRepo, passwordService, sessionService, sessionTTL)
+	userManagementUseCase := usecase.NewUserManagementUseCase(db, userRepo, tenantRepo, tenantRoleRepo, membershipRepo, permissionRepo, passwordService)
 
 	// Init handlers
 	userHandler := http.NewUserHandler(userUseCase)
 	oauthHandler := http.NewOAuthHandler(userUseCase)
 	registrationHandler := http.NewRegistrationHandler(registrationUseCase)
+	authHandler := http.NewAuthHandler(authUseCase)
+	userManagementHandler := http.NewUserManagementHandler(userManagementUseCase)
 
 	return &Container{
-		UserHandler:         *userHandler,
-		OauthHandler:        *oauthHandler,
-		RegistrationHandler: *registrationHandler,
-		JWTService:          *jwtService,
-		OAuthService:        *oauthService,
+		UserHandler:           *userHandler,
+		OauthHandler:          *oauthHandler,
+		RegistrationHandler:   *registrationHandler,
+		AuthHandler:           *authHandler,
+		UserManagementHandler: *userManagementHandler,
+		JWTService:            *jwtService,
+		OAuthService:          *oauthService,
 	}
 }

@@ -115,6 +115,7 @@ func (uc *RegistrationUseCase) RegisterWithTenant(ctx context.Context, req *mode
 	tenant = &entity.Tenant{
 		Name:     req.CompanyName,
 		Slug:     tenantSlug,
+		Config:   "{}",
 		IsActive: true,
 	}
 
@@ -123,19 +124,19 @@ func (uc *RegistrationUseCase) RegisterWithTenant(ctx context.Context, req *mode
 		return nil, fmt.Errorf("failed to create tenant: %w", err)
 	}
 
-	// 3. Create Owner Role for this tenant
-	ownerRole = &entity.TenantRole{
-		TenantID:    tenant.ID,
-		Name:        "owner",
-		Description: "Tenant owner with full access",
-	}
-
-	if err := tx.Create(ownerRole).Error; err != nil {
+	// 3. Copy system roles to the new tenant
+	if err := uc.copySystemRolesToTenant(ctx, tx, tenant.ID); err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("failed to create owner role: %w", err)
+		return nil, fmt.Errorf("failed to copy system roles: %w", err)
 	}
 
-	// 4. Create Membership (link user, tenant, and role)
+	// 4. Find the Tenant Owner role for this tenant
+	if err := tx.Where("tenant_id = ? AND name = ?", tenant.ID, "Tenant Owner").First(&ownerRole).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to find Tenant Owner role: %w", err)
+	}
+
+	// 5. Create Membership (link user, tenant, and role)
 	membership = &entity.Membership{
 		UserID:   user.ID,
 		TenantID: tenant.ID,
@@ -147,7 +148,7 @@ func (uc *RegistrationUseCase) RegisterWithTenant(ctx context.Context, req *mode
 		return nil, fmt.Errorf("failed to create membership: %w", err)
 	}
 
-	// 5. Create Kong Consumer using User UUID
+	// 6. Create Kong Consumer using User UUID
 	kongConsumerReq := &kong.ConsumerRequest{
 		Username: user.UUID,
 		CustomID: fmt.Sprintf("%d", user.ID),
@@ -205,4 +206,58 @@ func generateSlug(input string) string {
 	slug = strings.Trim(slug, "-")
 	
 	return slug
+}
+
+// copySystemRolesToTenant copies the system role templates to a specific tenant
+func (uc *RegistrationUseCase) copySystemRolesToTenant(ctx context.Context, tx *gorm.DB, tenantID int64) error {
+	// Get system tenant
+	var systemTenant entity.Tenant
+	if err := tx.Where("slug = ?", "system").First(&systemTenant).Error; err != nil {
+		return fmt.Errorf("system tenant not found. Please run the seeder first: %w", err)
+	}
+
+	// Get all system roles (templates)
+	var systemRoles []entity.TenantRole
+	if err := tx.Where("tenant_id = ?", systemTenant.ID).Find(&systemRoles).Error; err != nil {
+		return fmt.Errorf("failed to fetch system roles: %w", err)
+	}
+
+	if len(systemRoles) == 0 {
+		return fmt.Errorf("no system roles found. Please run the seeder first")
+	}
+
+	// Copy each role and its permissions to the new tenant
+	for _, systemRole := range systemRoles {
+		// Create new role for the tenant
+		newRole := entity.TenantRole{
+			TenantID:    tenantID,
+			Name:        systemRole.Name,
+			Description: systemRole.Description,
+		}
+
+		if err := tx.Create(&newRole).Error; err != nil {
+			return fmt.Errorf("failed to create role %s: %w", systemRole.Name, err)
+		}
+
+		// Get all permissions from the system role
+		var systemPermissions []entity.Permission
+		if err := tx.Where("role_id = ?", systemRole.ID).Find(&systemPermissions).Error; err != nil {
+			return fmt.Errorf("failed to fetch permissions for role %s: %w", systemRole.Name, err)
+		}
+
+		// Copy permissions to the new role
+		for _, systemPerm := range systemPermissions {
+			newPerm := entity.Permission{
+				RoleID:   newRole.ID,
+				Resource: systemPerm.Resource,
+				Action:   systemPerm.Action,
+			}
+
+			if err := tx.Create(&newPerm).Error; err != nil {
+				return fmt.Errorf("failed to create permission: %w", err)
+			}
+		}
+	}
+
+	return nil
 }

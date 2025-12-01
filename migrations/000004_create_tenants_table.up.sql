@@ -2,7 +2,6 @@ CREATE TABLE tenants (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100) UNIQUE NOT NULL,
   slug VARCHAR(100) UNIQUE NOT NULL, -- URL-friendly identifier
-  domain VARCHAR(100) UNIQUE, -- Optional custom domain
   config JSONB DEFAULT '{}', -- Tenant-specific configurations
   is_active BOOLEAN DEFAULT TRUE NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
