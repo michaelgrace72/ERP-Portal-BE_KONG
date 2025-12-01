@@ -56,4 +56,10 @@ var (
 	ErrOAuthCodeExchange      = errors.New("failed to exchange OAuth code for token")
 	ErrOAuthUserInfo          = errors.New("failed to get user info from OAuth provider")
 	ErrOAuthUserUseOAuthLogin = errors.New("user registered via OAuth, please use OAuth login")
+	
+	ErrValidationFailed       = errors.New("validation failed")
+	
+	ErrTenantNotFound         = errors.New("tenant not found")
+	ErrTenantAlreadyExists    = errors.New("tenant already exists")
+	ErrTenantSlugExists       = errors.New("tenant slug already exists")
 )

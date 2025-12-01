@@ -5,27 +5,46 @@ help: ## Display this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # Docker commands
-docker-up: ## Start development environment (PostgreSQL, Redis, RabbitMQ)
-	@echo "Starting development environment..."
-	@docker-compose -f docker-compose.dev.yml up -d
+docker-up: ## Start development environment with Kong (PostgreSQL, Kong, Redis, RabbitMQ)
+	@echo "Starting development environment with Kong Gateway..."
+	@docker compose up -d
 	@echo "Waiting for services to be ready..."
-	@sleep 5
+	@sleep 10
 	@echo "Services started successfully!"
 	@echo "PostgreSQL: localhost:5432"
+	@echo "Kong Proxy: http://localhost:8000 (HTTPS: 8443)"
+	@echo "Kong Admin API: http://localhost:8001 (HTTPS: 8444)"
 	@echo "Redis: localhost:6379"
 	@echo "RabbitMQ: localhost:5672 (Management UI: http://localhost:15672)"
 
 docker-down: ## Stop development environment
 	@echo "Stopping development environment..."
-	@docker-compose -f docker-compose.dev.yml down
+	@docker-compose down
 
 docker-logs: ## View logs from development services
-	@docker-compose -f docker-compose.dev.yml logs -f
+	@docker-compose logs -f
 
 docker-clean: ## Stop and remove all containers, volumes, and networks
 	@echo "Cleaning up development environment..."
-	@docker-compose -f docker-compose.dev.yml down -v
+	@docker-compose down -v
 	@echo "Cleanup completed!"
+
+# Kong specific commands
+kong-status: ## Check Kong Gateway status
+	@echo "Checking Kong status..."
+	@curl -s http://localhost:8001/status | jq
+
+kong-consumers: ## List all Kong consumers
+	@echo "Listing Kong consumers..."
+	@curl -s http://localhost:8001/consumers | jq
+
+kong-services: ## List all Kong services
+	@echo "Listing Kong services..."
+	@curl -s http://localhost:8001/services | jq
+
+kong-routes: ## List all Kong routes
+	@echo "Listing Kong routes..."
+	@curl -s http://localhost:8001/routes | jq
 
 # Golang-migrate commands (recommended for production)
 migrate-up: ## Run all pending migrations

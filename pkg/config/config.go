@@ -18,6 +18,7 @@ type Config struct {
 	RabbitMQ   RabbitMQConfig
 	Cloudinary CloudinaryConfig
 	Redis      RedisConfig
+	Kong       KongConfig
 }
 
 type ServerConfig struct {
@@ -89,6 +90,11 @@ type RedisConfig struct {
 	Expiration int
 }
 
+type KongConfig struct {
+	AdminURL string
+	Timeout  int
+}
+
 func Load() (*Config, error) {
 	return &Config{
 		Server: ServerConfig{
@@ -149,6 +155,10 @@ func Load() (*Config, error) {
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvAsInt("REDIS_DB", 0),
+		},
+		Kong: KongConfig{
+			AdminURL: getEnv("KONG_ADMIN_URL", "http://localhost:8001"),
+			Timeout:  getEnvAsInt("KONG_TIMEOUT", 30),
 		},
 	}, nil
 }

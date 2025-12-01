@@ -61,7 +61,7 @@ func NewUserUseCase(
 
 func formatUserInfo(user *entity.User) *model.UserInfo {
 	return &model.UserInfo{
-		PKID:     user.PKID,
+		ID:     user.ID,
 		Name:     user.Name,
 		Code:     user.Code,
 		Email:    user.Email,
@@ -110,7 +110,7 @@ func (u *UserUseCase) HandleOAuthCallback(ctx context.Context, req *model.OAuthC
 		if err == nil {
 			err = u.userRepo.UpdateOAuthInfo(
 				ctx,
-				existingUserByEmail.PKID,
+				existingUserByEmail.ID,
 				req.Provider,
 				user.OAuthID,
 			)
@@ -132,7 +132,7 @@ func (u *UserUseCase) HandleOAuthCallback(ctx context.Context, req *model.OAuthC
 		return nil, "", err
 	}
 
-	refreshToken, expiryAt, err := u.jwtService.GenerateRefreshToken(user.PKID)
+refreshToken, expiryAt, err := u.jwtService.GenerateRefreshToken(user.ID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -142,7 +142,7 @@ func (u *UserUseCase) HandleOAuthCallback(ctx context.Context, req *model.OAuthC
 		return nil, "", err
 	}
 
-	tokenData := entity.NewRefreshToken(user.PKID, hashedRefreshToken, expiryAt, false, *user)
+	tokenData := entity.NewRefreshToken(user.ID, hashedRefreshToken, expiryAt, false, *user)
 
 	if err := u.refreshTokenRepo.Save(ctx, tokenData); err != nil {
 		return nil, "", err
@@ -181,7 +181,7 @@ func (u *UserUseCase) Login(ctx context.Context, req *model.LoginRequest) (*mode
 		return nil, err
 	}
 
-	refreshToken, expiryAt, err := u.jwtService.GenerateRefreshToken(user.PKID)
+	refreshToken, expiryAt, err := u.jwtService.GenerateRefreshToken(user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (u *UserUseCase) Login(ctx context.Context, req *model.LoginRequest) (*mode
 		return nil, err
 	}
 
-	tokenData := entity.NewRefreshToken(user.PKID, hashedRefreshToken, expiryAt, false, *user)
+	tokenData := entity.NewRefreshToken(user.ID, hashedRefreshToken, expiryAt, false, *user)
 
 	if err := u.refreshTokenRepo.Save(ctx, tokenData); err != nil {
 		return nil, err
@@ -239,7 +239,7 @@ func (u *UserUseCase) Register(ctx context.Context, req *model.RegisterRequest) 
 
 		message := model.RegisterEvent{
 			UserEvent: model.UserEvent{
-				UserPKID: savedUser.PKID,
+				UserPKID: savedUser.ID,
 				Name:     savedUser.Name,
 			},
 			Email:           savedUser.Email,
@@ -279,7 +279,7 @@ func (u *UserUseCase) RefreshToken(ctx context.Context, hashedRefreshToken strin
 		return nil, err
 	}
 
-	newRefreshToken, expiryAt, err := u.jwtService.GenerateRefreshToken(user.PKID)
+	newRefreshToken, expiryAt, err := u.jwtService.GenerateRefreshToken(user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,7 @@ func (u *UserUseCase) RefreshToken(ctx context.Context, hashedRefreshToken strin
 		return nil, err
 	}
 
-	tokenData := entity.NewRefreshToken(user.PKID, newHashedRefreshToken, expiryAt, false, *user)
+	tokenData := entity.NewRefreshToken(user.ID, newHashedRefreshToken, expiryAt, false, *user)
 
 	if err := u.refreshTokenRepo.Save(ctx, tokenData); err != nil {
 		return nil, err
@@ -325,7 +325,7 @@ func (u *UserUseCase) SendVerifyEmail(ctx context.Context, req model.SendVerifyE
 
 	message := model.RegisterEvent{
 		UserEvent: model.UserEvent{
-			UserPKID: user.PKID,
+			UserPKID: user.ID,
 			Name:     user.Name,
 		},
 		Email:           user.Email,
@@ -395,7 +395,7 @@ func (u *UserUseCase) SendResetPassword(ctx context.Context, req model.SendReset
 
 	message := model.ResetPasswordEvent{
 		UserEvent: model.UserEvent{
-			UserPKID: user.PKID,
+			UserPKID: user.ID,
 			Name:     user.Name,
 		},
 		Email:    user.Email,
@@ -519,7 +519,7 @@ func (u *UserUseCase) UpdateUser(ctx context.Context, code string, req *model.Up
 
 		path, err := u.localStorageService.UploadFile(
 			ctx,
-			fmt.Sprintf("avatar_%d_%d.jpg", user.PKID, time.Now().Unix()),
+			fmt.Sprintf("avatar_%d_%d.jpg", user.ID, time.Now().Unix()),
 			req.Avatar.Size,
 			*req.Avatar,
 			"users/"+user.Code+"/avatar/",
@@ -582,7 +582,7 @@ func (u *UserUseCase) DeleteUser(ctx context.Context, code string) error {
 		return errors.ErrUserNotFound
 	}
 
-	err = u.refreshTokenRepo.RevokeAllByUserID(ctx, user.PKID)
+	err = u.refreshTokenRepo.RevokeAllByUserID(ctx, user.ID)
 	if err != nil {
 		return err
 	}

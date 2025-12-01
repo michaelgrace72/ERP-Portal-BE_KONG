@@ -24,15 +24,14 @@ func (j *JWTService) GenerateAccessToken(user *entity.User) (string, time.Time, 
 	expiryAt := now.Add(j.cfg.AccessTokenExpiry)
 
 	claims := jwt.MapClaims{
-		"user_pkid":  user.PKID,
+		"user_pkid":  user.ID,
 		"user_code":  user.Code,
-		"user_role":  user.Role,
 		"token_type": "access",
 		"exp":        expiryAt.Unix(),
 		"iat":        now.Unix(),
 		"nbf":        now.Unix(),
 		"iss":        j.cfg.JWTIssuer,
-		"sub":        strconv.FormatInt(user.PKID, 10),
+		"sub":        strconv.FormatInt(user.ID, 10),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

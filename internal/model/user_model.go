@@ -7,7 +7,7 @@ import (
 
 type (
 	UserInfo struct {
-		PKID     int64         `json:"pkid"`
+		ID     int64         `json:"pkid"`
 		Code     string        `json:"code"`
 		Name     string        `json:"name"`
 		Email    string        `json:"email"`

@@ -12,6 +12,7 @@ func SetupRoutes(
 	router *gin.Engine,
 	userHandler *http.UserHandler,
 	oauthHandler *http.OAuthHandler,
+	registrationHandler *http.RegistrationHandler,
 	jwtService *security.JWTService,
 ) {
 	// Setup handlers
@@ -27,7 +28,7 @@ func SetupRoutes(
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", userHandler.Login)
-			auth.POST("/register", userHandler.Register)
+			auth.POST("/register", registrationHandler.RegisterWithTenant) // Updated to use new registration handler
 			auth.POST("/refresh-token", userHandler.RefreshToken)
 			auth.POST("/verify-email", userHandler.VerifyEmail)
 			auth.POST("/reset-password", userHandler.ResetPassword)
