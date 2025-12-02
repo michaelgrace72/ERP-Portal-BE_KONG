@@ -1,0 +1,123 @@
+stages:
+  - sonar_check
+  - pull
+  - build
+  - deploy
+
+before_script:
+  - echo "Running $CI_JOB_STAGE stage for $CI_PROJECT_NAME"
+  - git config --global --add safe.directory /var/www/${CI_PROJECT_NAME}
+
+
+sonar_check:
+  stage: sonar_check
+  image: localhost:8001/sonar
+  before_script:
+    - echo "Starting SonarQube analysis for $CI_PROJECT_NAME"
+    - echo "Branch $CI_COMMIT_REF_NAME, Commit $CI_COMMIT_SHORT_SHA"
+  script:
+    - |
+      sonar-scanner \
+        -Dsonar.projectKey=${CI_PROJECT_NAME} \
+        -Dsonar.projectName=${CI_PROJECT_NAME} \
+        -Dsonar.projectVersion=${CI_COMMIT_SHORT_SHA} \
+        -Dsonar.host.url=${SONAR_HOST_URL} \
+        -Dsonar.login=${SONAR_TOKEN} \
+        -Dsonar.sources=. \
+        -Dsonar.sourceEncoding=UTF-8 \
+        -Dsonar.exclusions="**/*_test.go,**/vendor/**,**/*.pb.go,**/mock_*.go" \
+        -Dsonar.coverage.exclusions="**/*_test.go,**/vendor/**,**/*.pb.go,**/mock_*.go" \
+        -Dsonar.go.coverage.reportPaths=coverage.out \
+        -Dsonar.scanner.force-deprecated-java-version-grace-period=true \
+        -Dsonar.qualitygate.wait=false \
+        -Dsonar.scm.disabled=true \
+  cache:
+    key: "sonar-cache-${CI_PROJECT_ID}-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .sonar/cache
+      - .scannerwork
+    policy: pull-push
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+      variables:
+        SONAR_ANALYSIS_MODE: "preview"
+  allow_failure: true
+  timeout: 10m
+  retry:
+    max: 1
+    when: runner_system_failure
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+    expire_in: 1 hour
+    when: always
+
+pull_code:
+  stage: pull
+  script:
+    - chmod +x script.sh
+    - ./script.sh
+  tags:
+    - pull
+  needs:
+    - job: sonar_check
+      artifacts: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  artifacts:
+    untracked: false
+    when: on_success
+    access: all
+    expire_in: 1 hour
+
+build:
+  stage: build
+  script:
+    - chmod +x script.sh
+    - ./script.sh
+  tags:
+    - build
+  only:
+    - main
+  artifacts:
+    paths:
+      - .image_version
+    expire_in: 1 hour
+
+deploy:
+  stage: deploy
+  script:
+    - chmod +x script.sh
+    - chmod +x deploy.sh
+    - ./script.sh
+  tags:
+    - deploy
+  only:
+    - main
+  when: manual
+  needs:
+    - job: build
+      artifacts: true
+
+cleanup:
+  stage: deploy
+  script:
+    - echo "Cleaning up..."
+    - docker image prune -f --filter "until=24h"
+    - docker container prune -f
+  tags:
+    - deploy
+  only:
+    - main
+  allow_failure: true
+  artifacts:
+    untracked: false
+    when: on_success
+    access: all
+    expire_in: "30 days"

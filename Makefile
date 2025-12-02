@@ -1,143 +1,86 @@
-.PHONY: help migrate-up migrate-down migrate-force migrate-version migrate-create migrate-legacy-up migrate-legacy-down migrate-legacy-fresh migrate-seed build run docker-up docker-down docker-logs
+.PHONY: help build up down logs ps infra blue green deploy-blue deploy-green health-check-blue health-check-green clean
 
-help: ## Display this help message
-	@echo "Available commands:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+help: ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Available targets:'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-# Docker commands
-docker-up: ## Start development environment with Kong (PostgreSQL, Kong, Redis, RabbitMQ)
-	@echo "Starting development environment with Kong Gateway..."
-	@docker compose up -d
-	@echo "Waiting for services to be ready..."
-	@sleep 10
-	@echo "Services started successfully!"
-	@echo "PostgreSQL: localhost:5432"
-	@echo "Kong Proxy: http://localhost:8000 (HTTPS: 8443)"
-	@echo "Kong Admin API: http://localhost:8001 (HTTPS: 8444)"
-	@echo "Redis: localhost:6379"
-	@echo "RabbitMQ: localhost:5672 (Management UI: http://localhost:15672)"
+build: ## Build Portal service image
+	docker build -t localhost:8001/portal-be:latest .
 
-kong-up: ## Start Kong Gateway with all services
-	@echo "Starting Kong Gateway environment..."
-	@docker compose -f docker-compose.kong.yml up -d
-	@echo "Waiting for Kong to be ready..."
-	@sleep 10
-	@echo "Running Kong setup script..."
-	@./scripts/setup-kong.sh
+infra: ## Start infrastructure services (PostgreSQL, Kong, Redis, Konga)
+	docker compose up -d postgres kong-bootstrap kong konga redis
+	@echo "✅ Infrastructure started"
+	@echo "- PostgreSQL: localhost:3605"
+	@echo "- Kong Proxy: localhost:3600"
+	@echo "- Kong Admin: localhost:3602"
+	@echo "- Konga UI: localhost:3604"
+	@echo "- Redis: localhost:3606"
+
+blue: ## Start/deploy blue instance
+	docker compose up -d portal-be-blue
+	@echo "✅ Blue instance started on port 3502"
+
+green: ## Start/deploy green instance
+	docker compose up -d portal-be-green
+	@echo "✅ Green instance started on port 3503"
+
+deploy-blue: build ## Build and deploy to blue
+	docker compose up -d portal-be-blue
+	@echo "✅ Blue deployment complete"
+
+deploy-green: build ## Build and deploy to green
+	docker compose up -d portal-be-green
+	@echo "✅ Green deployment complete"
+
+up: ## Start all services (infrastructure + blue)
+	docker compose up -d
+
+down: ## Stop all services
+	docker compose down
+
+logs: ## Show logs for all services
+	docker compose logs -f
+
+logs-blue: ## Show logs for blue instance
+	docker compose logs -f portal-be-blue
+
+logs-green: ## Show logs for green instance
+	docker compose logs -f portal-be-green
+
+ps: ## Show running containers
+	docker compose ps
+
+health-check-blue: ## Check blue instance health
+	@echo "Checking Blue instance..."
+	@curl -s http://localhost:3502/health || echo "❌ Blue: DOWN"
+
+health-check-green: ## Check green instance health
+	@echo "Checking Green instance..."
+	@curl -s http://localhost:3503/health || echo "❌ Green: DOWN"
+
+health-check: ## Check all services health
+	@echo "=== Infrastructure Health ==="
+	@curl -s http://localhost:3602/ | grep -q "version" && echo "✅ Kong: UP" || echo "❌ Kong: DOWN"
+	@curl -s http://localhost:3604 > /dev/null && echo "✅ Konga: UP" || echo "❌ Konga: DOWN"
 	@echo ""
-	@echo "✅ Kong is ready!"
-	@echo "   Kong Proxy: http://localhost:8000"
-	@echo "   Kong Admin: http://localhost:8001"
+	@echo "=== Application Health ==="
+	@curl -s http://localhost:3502/health > /dev/null && echo "✅ Blue (3502): UP" || echo "❌ Blue: DOWN"
+	@curl -s http://localhost:3503/health > /dev/null && echo "✅ Green (3503): UP" || echo "❌ Green: DOWN"
 
-kong-down: ## Stop Kong Gateway environment
-	@echo "Stopping Kong Gateway..."
-	@docker compose -f docker-compose.kong.yml down
+clean: ## Remove stopped containers and volumes
+	docker compose down -v
+	docker system prune -f
 
-kong-logs: ## View Kong logs
-	@docker compose -f docker-compose.kong.yml logs -f kong
+restart-blue: ## Restart blue instance
+	docker compose restart portal-be-blue
 
-kong-reset: ## Reset Kong configuration (remove all services/routes)
-	@echo "Resetting Kong configuration..."
-	@docker compose -f docker-compose.kong.yml down -v
-	@docker compose -f docker-compose.kong.yml up -d
-	@sleep 10
-	@./scripts/setup-kong.sh
+restart-green: ## Restart green instance
+	docker compose restart portal-be-green
 
-docker-down: ## Stop development environment
-	@echo "Stopping development environment..."
-	@docker-compose down
+stop-blue: ## Stop blue instance
+	docker compose stop portal-be-blue
 
-docker-logs: ## View logs from development services
-	@docker-compose logs -f
-
-docker-clean: ## Stop and remove all containers, volumes, and networks
-	@echo "Cleaning up development environment..."
-	@docker-compose down -v
-	@echo "Cleanup completed!"
-
-# Kong specific commands
-kong-status: ## Check Kong Gateway status
-	@echo "Checking Kong status..."
-	@curl -s http://localhost:8001/status | jq
-
-kong-consumers: ## List all Kong consumers
-	@echo "Listing Kong consumers..."
-	@curl -s http://localhost:8001/consumers | jq
-
-kong-services: ## List all Kong services
-	@echo "Listing Kong services..."
-	@curl -s http://localhost:8001/services | jq
-
-kong-routes: ## List all Kong routes
-	@echo "Listing Kong routes..."
-	@curl -s http://localhost:8001/routes | jq
-
-# Golang-migrate commands (recommended for production)
-migrate-up: ## Run all pending migrations
-	@echo "Running migrations..."
-	@go run cmd/migrate/main.go up
-
-migrate-down: ## Rollback the last migration
-	@echo "Rolling back last migration..."
-	@go run cmd/migrate/main.go down
-
-migrate-force: ## Force migration to a specific version (usage: make migrate-force VERSION=1)
-	@echo "Forcing migration to version $(VERSION)..."
-	@go run cmd/migrate/main.go force $(VERSION)
-
-migrate-version: ## Show current migration version
-	@go run cmd/migrate/main.go version
-
-migrate-create: ## Create a new migration file (usage: make migrate-create NAME=create_users_table)
-	@echo "Creating migration: $(NAME)"
-	@go run cmd/migrate/main.go create $(NAME)
-
-# Seeder commands
-seed: ## Run database seeders (roles and permissions)
-	@echo "Running database seeders..."
-	@go run cmd/seed/main.go cmd/seed/copy_roles.go
-
-copy-roles: ## Copy system roles to a tenant (usage: make copy-roles TENANT_ID=1)
-	@if [ -z "$(TENANT_ID)" ]; then \
-		echo "Error: TENANT_ID is required"; \
-		echo "Usage: make copy-roles TENANT_ID=1"; \
-		exit 1; \
-	fi
-	@echo "Copying system roles to tenant $(TENANT_ID)..."
-	@go run cmd/copy-roles/main.go --tenant-id=$(TENANT_ID)
-
-# Legacy GORM migration commands (for development)
-migrate-legacy-up: ## Run GORM auto-migrations (development only)
-	@echo "Running GORM migrations..."
-	@go run cmd/migrate/main.go migrate
-
-migrate-legacy-down: ## Rollback GORM migrations (development only)
-	@echo "Rolling back GORM migrations..."
-	@go run cmd/migrate/main.go rollback
-
-migrate-legacy-fresh: ## Drop all tables and recreate (development only)
-	@echo "Running fresh GORM migrations..."
-	@go run cmd/migrate/main.go fresh
-
-# Build and run commands
-build: ## Build the application
-	@echo "Building application..."
-	@go build -o bin/server cmd/server/main.go
-
-run: ## Run the application
-	@echo "Running application..."
-	@go run cmd/server/main.go
-
-# Development helpers
-install-migrate-cli: ## Install golang-migrate CLI tool
-	@echo "Installing golang-migrate CLI..."
-	@go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-
-test: ## Run tests
-	@echo "Running tests..."
-	@go test ./... -v
-
-clean: ## Clean build artifacts
-	@echo "Cleaning..."
-	@rm -rf bin/
-	@rm -rf tmp/
+stop-green: ## Stop green instance
+	docker compose stop portal-be-green

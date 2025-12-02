@@ -1,53 +1,75 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
+# ============================================
+# BUILD STAGE
+# ============================================
+FROM golang:1.23-alpine AS builder
 
-RUN apk add --no-cache git
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
 
 # Set working directory
 WORKDIR /app
 
-# Copy go.mod and go.sum first for better caching
+# Copy dependency files first for better caching
 COPY go.mod go.sum ./
 
 # Download dependencies
-RUN go mod download
+RUN go mod download && go mod verify
 
 # Copy source code
 COPY . .
 
-# Build the binary
-RUN go build -o main ./cmd/server
+# Tidy dependencies
+RUN go mod tidy
 
-RUN go build -o migrate ./cmd/migrate
+# Build binaries with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o main ./cmd/server
 
-# Production stage
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o migrate ./cmd/migrate
+
+# ============================================
+# PRODUCTION STAGE
+# ============================================
 FROM alpine:latest
 
-# Install ca-certificates if needed for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install runtime dependencies
+RUN apk --no-cache add \
+    ca-certificates \
+    tzdata \
+    wget \
+    curl
 
-# Create a non-root user
+# Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
 # Set working directory
 WORKDIR /app
 
-COPY --from=builder /app/.env .
-
-# Copy the binary from builder stage, migrations, and other necessary files
+# Copy binaries from builder
 COPY --from=builder /app/main .
 COPY --from=builder /app/migrate .
+
+# Copy required directories
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/assets ./assets
 
-# Change ownership to non-root user
-RUN chown appuser:appgroup main
+# Create directories for uploads (if using local storage)
+RUN mkdir -p /app/assets/uploads && \
+    chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
 
-EXPOSE ${INTERNAL_PORT}
+# Expose port
+EXPOSE 3000
 
-# Run the binary
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+# Default command (can be overridden in docker-compose)
 CMD ["./main"]

@@ -1,33 +1,33 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
+  
+  # PostgreSQL Database for Portal Service
   postgres:
     image: postgres:15-alpine
     container_name: portal-postgres
     environment:
-      POSTGRES_USER: portal_user
-      POSTGRES_PASSWORD: portal_pass
-      POSTGRES_DB: portal_db
+      POSTGRES_USER: ${DB_USER:-portal_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-portal_pass}
+      POSTGRES_DB: ${DB_NAME:-portal_db}
     ports:
-      - "5434:5432"
+      - "3605:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U portal_user -d portal_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-portal_user} -d ${DB_NAME:-portal_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - portal-network
+    restart: unless-stopped
 
-  # Kong Database (PostgreSQL)
+  # PostgreSQL Database for Kong Gateway
   kong-database:
     image: postgres:15-alpine
     container_name: kong-postgres
     environment:
       POSTGRES_USER: kong
-      POSTGRES_PASSWORD: kongpass
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-kongpass}
       POSTGRES_DB: kong
     ports:
       - "5433:5432"
@@ -40,8 +40,9 @@ services:
       retries: 5
     networks:
       - portal-network
+    restart: unless-stopped
 
-  # Kong Migrations
+  # Kong Migrations (runs once to bootstrap)
   kong-migrations:
     image: kong:ubuntu
     container_name: kong-migrations
@@ -51,7 +52,7 @@ services:
       KONG_PG_HOST: kong-database
       KONG_PG_PORT: 5432
       KONG_PG_USER: kong
-      KONG_PG_PASSWORD: kongpass
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-kongpass}
       KONG_PG_DATABASE: kong
     depends_on:
       kong-database:
@@ -69,19 +70,20 @@ services:
       KONG_PG_HOST: kong-database
       KONG_PG_PORT: 5432
       KONG_PG_USER: kong
-      KONG_PG_PASSWORD: kongpass
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD:-kongpass}
       KONG_PG_DATABASE: kong
       KONG_PROXY_ACCESS_LOG: /dev/stdout
       KONG_ADMIN_ACCESS_LOG: /dev/stdout
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
-      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
-      KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_LOG_LEVEL: ${KONG_LOG_LEVEL:-info}
+      # CRITICAL: Allow resty.http and cjson in sandbox for pre-function plugin
+      KONG_UNTRUSTED_LUA_SANDBOX_REQUIRES: resty.http,cjson
     ports:
-      - "8000:8000"   # Proxy HTTP
-      - "8443:8443"   # Proxy HTTPS
-      - "8001:8001"   # Admin API HTTP
-      - "8444:8444"   # Admin API HTTPS
+      - "3600:8000"   # Proxy HTTP (public API gateway)
+      - "3602:8001"   # Admin API HTTP
     depends_on:
       kong-database:
         condition: service_healthy
@@ -94,33 +96,36 @@ services:
       retries: 10
     networks:
       - portal-network
+    restart: unless-stopped
 
-  # Redis Cache
+  # Redis Cache (for sessions and tokens)
   redis:
     image: redis:7-alpine
     container_name: portal-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
     ports:
-      - "6379:6379"
+      - "3606:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - portal-network
+    restart: unless-stopped
 
   # RabbitMQ Message Broker
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: portal-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     ports:
-      - "5673:5672"   # AMQP
-      - "15673:15672" # Management UI
+      - "3607:5672"     # AMQP
+      - "3608:15672" # Management UI
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -130,6 +135,121 @@ services:
       retries: 5
     networks:
       - portal-network
+    restart: unless-stopped
+
+  # Portal Service Migrations
+  portal-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portal-migrations
+    # run migrations 'up' explicitly so the container executes the migrate process and exits
+    command: "/app/migrate up"
+    environment:
+      # Database Configuration - must match postgres container
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-portal_db}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      # These are needed for config.Load() to work properly
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "3000"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - portal-network
+    restart: on-failure
+
+  # Portal Service Application
+  portal-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portal-service
+    command: /app/main
+    environment:
+      # Server Configuration
+      SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+      SERVER_PORT: ${SERVER_PORT:-3000}
+      
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-portal_user}
+      DB_PASSWORD: ${DB_PASSWORD:-portal_pass}
+      DB_NAME: ${DB_NAME:-portal_db}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis123}
+      REDIS_DB: ${REDIS_DB:-0}
+      
+      # RabbitMQ Configuration
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+      
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      JWT_EXPIRY: ${JWT_EXPIRY:-86400}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-604800}
+      
+      # Phantom Token Configuration
+      PHANTOM_TOKEN_PREFIX: ${PHANTOM_TOKEN_PREFIX:-ref_}
+      PHANTOM_TOKEN_EXPIRY: ${PHANTOM_TOKEN_EXPIRY:-1800}
+      
+      # OAuth Configuration (if needed)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL}
+      
+      # Storage Configuration
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      LOCAL_STORAGE_PATH: ${LOCAL_STORAGE_PATH:-./assets/uploads}
+      
+      # Cloudinary Configuration (if using)
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      
+      # Encryption
+      AES_KEY: ${AES_KEY:-change-this-32-character-key12}
+      
+      # Environment
+      APP_ENV: ${APP_ENV:-production}
+    ports:
+      - "3502:3000"
+    volumes:
+      - ./assets:/app/assets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      portal-migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - portal-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
@@ -140,3 +260,4 @@ volumes:
 networks:
   portal-network:
     driver: bridge
+
