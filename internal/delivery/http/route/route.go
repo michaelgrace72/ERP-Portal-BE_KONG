@@ -15,10 +15,11 @@ func SetupRoutes(
 	registrationHandler *http.RegistrationHandler,
 	authHandler *http.AuthHandler,
 	userManagementHandler *http.UserManagementHandler,
+	introspectionHandler *http.IntrospectionHandler,
 	jwtService *security.JWTService,
 ) {
-	// Setup handlers
-	authMiddleware := middleware.NewAuthMiddleware(jwtService)
+	// Setup hybrid middleware (supports both Kong headers and JWT)
+	hybridAuth := middleware.NewHybridAuthMiddleware(jwtService)
 
 	// Setup CORS
 	router.Use(middleware.CORS())
@@ -39,6 +40,10 @@ func SetupRoutes(
 			auth.POST("/refresh", authHandler.RefreshSession)
 			auth.GET("/session", authHandler.GetSession)
 			
+			// Kong introspection endpoint (called by Kong to validate phantom tokens)
+			// This endpoint validates the reference token and returns session context as headers
+			auth.POST("/introspect", introspectionHandler.Introspect)
+			
 			// Registration
 			auth.POST("/register", registrationHandler.RegisterWithTenant)
 			
@@ -57,7 +62,7 @@ func SetupRoutes(
 		}
 
 		profile := api.Group("/profile")
-		profile.Use(authMiddleware.RequireAuth())
+		profile.Use(hybridAuth.RequireAuth())
 		{
 			profile.GET("", userHandler.Profile)
 			profile.PUT("", userHandler.UpdateProfile)
@@ -65,8 +70,12 @@ func SetupRoutes(
 			profile.POST("/logout", userHandler.Logout)
 		}
 
+		// ====================
+		// USER MANAGEMENT ROUTES (Hybrid Authentication)
+		// These routes support both Kong headers (when proxied) and JWT tokens (direct access)
+		// ====================
 		users := api.Group("/users")
-		users.Use(authMiddleware.RequireAuth())
+		users.Use(hybridAuth.RequireAuth())
 		{
 			// User management - Get own profile
 			users.GET("/me", userManagementHandler.GetMyProfile)
@@ -84,7 +93,7 @@ func SetupRoutes(
 
 		// Membership management
 		memberships := api.Group("/memberships")
-		memberships.Use(authMiddleware.RequireAuth())
+		memberships.Use(hybridAuth.RequireAuth())
 		{
 			memberships.POST("", userManagementHandler.AssignUserToTenant)
 			memberships.DELETE("", userManagementHandler.RemoveUserFromTenant)
@@ -93,7 +102,7 @@ func SetupRoutes(
 
 		// Tenant management
 		tenants := api.Group("/tenants")
-		tenants.Use(authMiddleware.RequireAuth())
+		tenants.Use(hybridAuth.RequireAuth())
 		{
 			tenants.GET("/:id/members", userManagementHandler.GetTenantMembers)
 			tenants.GET("/:id/roles", userManagementHandler.GetTenantRoles)

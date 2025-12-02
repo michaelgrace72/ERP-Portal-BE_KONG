@@ -17,6 +17,32 @@ docker-up: ## Start development environment with Kong (PostgreSQL, Kong, Redis, 
 	@echo "Redis: localhost:6379"
 	@echo "RabbitMQ: localhost:5672 (Management UI: http://localhost:15672)"
 
+kong-up: ## Start Kong Gateway with all services
+	@echo "Starting Kong Gateway environment..."
+	@docker compose -f docker-compose.kong.yml up -d
+	@echo "Waiting for Kong to be ready..."
+	@sleep 10
+	@echo "Running Kong setup script..."
+	@./scripts/setup-kong.sh
+	@echo ""
+	@echo "✅ Kong is ready!"
+	@echo "   Kong Proxy: http://localhost:8000"
+	@echo "   Kong Admin: http://localhost:8001"
+
+kong-down: ## Stop Kong Gateway environment
+	@echo "Stopping Kong Gateway..."
+	@docker compose -f docker-compose.kong.yml down
+
+kong-logs: ## View Kong logs
+	@docker compose -f docker-compose.kong.yml logs -f kong
+
+kong-reset: ## Reset Kong configuration (remove all services/routes)
+	@echo "Resetting Kong configuration..."
+	@docker compose -f docker-compose.kong.yml down -v
+	@docker compose -f docker-compose.kong.yml up -d
+	@sleep 10
+	@./scripts/setup-kong.sh
+
 docker-down: ## Stop development environment
 	@echo "Stopping development environment..."
 	@docker-compose down

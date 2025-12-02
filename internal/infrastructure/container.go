@@ -23,8 +23,10 @@ type Container struct {
 	RegistrationHandler     http.RegistrationHandler
 	AuthHandler             http.AuthHandler
 	UserManagementHandler   http.UserManagementHandler
+	IntrospectionHandler    http.IntrospectionHandler
 	JWTService              security.JWTService
 	OAuthService            security.OAuthService
+	SessionService          *session.SessionService
 }
 
 func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Container {
@@ -60,6 +62,7 @@ func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Contain
 	registrationUseCase := usecase.NewRegistrationUseCase(db, userRepo, tenantRepo, tenantRoleRepo, membershipRepo, passwordService, kongClient)
 	authUseCase := usecase.NewAuthUseCase(userRepo, membershipRepo, tenantRepo, tenantRoleRepo, permissionRepo, passwordService, sessionService, sessionTTL)
 	userManagementUseCase := usecase.NewUserManagementUseCase(db, userRepo, tenantRepo, tenantRoleRepo, membershipRepo, permissionRepo, passwordService)
+	introspectionUseCase := usecase.NewIntrospectionUseCase(sessionService)
 
 	// Init handlers
 	userHandler := http.NewUserHandler(userUseCase)
@@ -67,6 +70,7 @@ func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Contain
 	registrationHandler := http.NewRegistrationHandler(registrationUseCase)
 	authHandler := http.NewAuthHandler(authUseCase)
 	userManagementHandler := http.NewUserManagementHandler(userManagementUseCase)
+	introspectionHandler := http.NewIntrospectionHandler(introspectionUseCase)
 
 	return &Container{
 		UserHandler:           *userHandler,
@@ -74,7 +78,9 @@ func NewContainer(db *gorm.DB, ch *amqp091.Channel, cfg *config.Config) *Contain
 		RegistrationHandler:   *registrationHandler,
 		AuthHandler:           *authHandler,
 		UserManagementHandler: *userManagementHandler,
+		IntrospectionHandler:  *introspectionHandler,
 		JWTService:            *jwtService,
 		OAuthService:          *oauthService,
+		SessionService:        sessionService,
 	}
 }
