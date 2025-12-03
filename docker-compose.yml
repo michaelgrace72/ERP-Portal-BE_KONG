@@ -167,6 +167,35 @@ services:
       - portal-network
     restart: on-failure
 
+  # Portal Service Database Seeder
+  portal-seeder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portal-seeder
+    command: "/app/seed"
+    environment:
+      # Database Configuration - must match postgres container
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-portal_db}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      # These are needed for config.Load() to work properly
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "3000"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+    depends_on:
+      portal-migrations:
+        condition: service_completed_successfully
+    networks:
+      - portal-network
+    restart: on-failure
+
   # Portal Service Application
   portal-service:
     build:
@@ -199,6 +228,10 @@ services:
       RABBITMQ_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
       RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+      
+      # Kong Configuration
+      KONG_ADMIN_URL: http://kong:8001
+      KONG_TIMEOUT: ${KONG_TIMEOUT:-30}
       
       # JWT Configuration
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
@@ -239,6 +272,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      portal-seeder:
+        condition: service_completed_successfully
       portal-migrations:
         condition: service_completed_successfully
     healthcheck:

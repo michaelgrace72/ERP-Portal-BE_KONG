@@ -12,4 +12,4 @@ CREATE TABLE tenants (
 
 -- Create indexes
 CREATE INDEX idx_tenants_slug ON tenants(slug);
-CREATE INDEX idx_tenants_is_active ON tenants(is_active);
+CREATE INDEX idx_tenants_is_active ON tenants(is_active);;

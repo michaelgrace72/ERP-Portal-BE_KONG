@@ -30,6 +30,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s" \
     -o migrate ./cmd/migrate
 
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o seed ./cmd/seed
+
 # ============================================
 # PRODUCTION STAGE
 # ============================================
@@ -52,6 +56,7 @@ WORKDIR /app
 # Copy binaries from builder
 COPY --from=builder /app/main .
 COPY --from=builder /app/migrate .
+COPY --from=builder /app/seed .
 
 # Copy required directories
 COPY --from=builder /app/migrations ./migrations
