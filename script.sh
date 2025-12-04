@@ -61,7 +61,7 @@ build_image() {
 }
 
 deploy_app() {
-  echo -e "\n[Deploy] Deploying application with Blue-Green strategy..."
+  echo -e "\n[Deploy] Deploying application..."
   cd "${PROJECT_DIR}"
 
   # Try to read version from build stage artifact
@@ -86,18 +86,31 @@ deploy_app() {
   echo "Deploying with IMAGE_TAG=${IMAGE_TAG}"
   echo "Registry: ${CI_REGISTRY_IMAGE}"
 
-  # Execute blue-green deployment script
-  if [ -f "./deploy.sh" ]; then
-    chmod +x ./deploy.sh
-    ./deploy.sh
-  else
-    echo "deploy.sh not found, falling back to simple deployment"
-    if command -v docker-compose &> /dev/null; then
-      docker-compose up -d
-    elif docker compose version &> /dev/null; then
-      docker compose up -d
-    fi
+  # Stop existing containers
+  echo "Stopping existing containers..."
+  if command -v docker-compose &> /dev/null; then
+    docker-compose down || true
+  elif docker compose version &> /dev/null; then
+    docker compose down || true
   fi
+
+  # Pull latest images
+  echo "Pulling latest images..."
+  if command -v docker-compose &> /dev/null; then
+    docker-compose pull || true
+  elif docker compose version &> /dev/null; then
+    docker compose pull || true
+  fi
+
+  # Start services
+  echo "Starting services..."
+  if command -v docker-compose &> /dev/null; then
+    docker-compose up -d
+  elif docker compose version &> /dev/null; then
+    docker compose up -d
+  fi
+
+  echo "Deployment completed successfully!"
 }
 
 case "$CI_JOB_STAGE" in
