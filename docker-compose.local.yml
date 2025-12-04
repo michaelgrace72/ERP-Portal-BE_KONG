@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-kongpass}
       POSTGRES_DB: kong
     ports:
-      - "5433:5432"
+      - "3609:5432"
     volumes:
       - kong_data:/var/lib/postgresql/data
     healthcheck:
