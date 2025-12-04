@@ -1,27 +1,7 @@
 services:
   
-  # PostgreSQL Database for Portal Service
-  postgres:
-    image: postgres:15-alpine
-    container_name: portal-postgres
-    environment:
-      POSTGRES_USER: ${DB_USER:-portal_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-portal_pass}
-      POSTGRES_DB: ${DB_NAME:-portal_db}
-    ports:
-      - "3605:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-portal_user} -d ${DB_NAME:-portal_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - portal-network
-    restart: unless-stopped
-
-  # PostgreSQL Database for Kong Gateway
+  # PostgreSQL Database for Kong Gateway (still containerized)
+  # Note: Portal service will use local PostgreSQL on host
   kong-database:
     image: postgres:15-alpine
     container_name: kong-postgres
@@ -30,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-kongpass}
       POSTGRES_DB: kong
     ports:
-      - "3609:5432"
+      - "5433:5432"
     volumes:
       - kong_data:/var/lib/postgresql/data
     healthcheck:
@@ -138,6 +118,7 @@ services:
     restart: unless-stopped
 
   # Portal Service Migrations
+  # This will connect to your local PostgreSQL database on the host
   portal-migrations:
     build:
       context: .
@@ -146,9 +127,10 @@ services:
     # run migrations 'up' explicitly so the container executes the migrate process and exits
     command: "/app/migrate up"
     environment:
-      # Database Configuration - must match postgres container
-      DB_HOST: postgres
-      DB_PORT: 5432
+      # Database Configuration - connects to host's PostgreSQL
+      # Use host.docker.internal to access host machine's services
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-portal_db}
@@ -160,8 +142,12 @@ services:
       REDIS_PORT: "6379"
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: "5672"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      postgres:
+      redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - portal-network
@@ -175,9 +161,9 @@ services:
     container_name: portal-seeder
     command: "/app/seed"
     environment:
-      # Database Configuration - must match postgres container
-      DB_HOST: postgres
-      DB_PORT: 5432
+      # Database Configuration - connects to host's PostgreSQL
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-portal_db}
@@ -189,6 +175,8 @@ services:
       REDIS_PORT: "6379"
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: "5672"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       portal-migrations:
         condition: service_completed_successfully
@@ -208,11 +196,11 @@ services:
       SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
       SERVER_PORT: ${SERVER_PORT:-3000}
       
-      # Database Configuration
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${DB_USER:-portal_user}
-      DB_PASSWORD: ${DB_PASSWORD:-portal_pass}
+      # Database Configuration - connects to host's PostgreSQL
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-portal_db}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
       
@@ -265,9 +253,9 @@ services:
       - "3502:3000"
     volumes:
       - ./assets:/app/assets
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -287,7 +275,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
   kong_data:
   redis_data:
   rabbitmq_data:
@@ -295,4 +282,3 @@ volumes:
 networks:
   portal-network:
     driver: bridge
-
