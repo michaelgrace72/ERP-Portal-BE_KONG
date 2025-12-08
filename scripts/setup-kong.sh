@@ -1,157 +1,136 @@
 #!/bin/bash
-
-# Kong Setup Script
-# This script configures Kong Gateway for the Phantom Token pattern
-
 set -e
 
-KONG_ADMIN_URL="${KONG_ADMIN_URL:-http://localhost:8001}"
-# Use Docker gateway IP for Linux (172.19.0.1), or host.docker.internal for Mac/Windows
-PORTAL_SERVICE_URL="${PORTAL_SERVICE_URL:-http://172.19.0.1:3000}"
+# Configuration
+KONG_ADMIN="${KONG_ADMIN_URL:-http://localhost:3602}"
+# Portal service uses internal Docker network name
+UPSTREAM_URL="${PORTAL_SERVICE_URL:-http://portal-service:3000}"
 
-echo "================================"
-echo "Kong Gateway Setup"
-echo "================================"
-echo ""
-echo "Kong Admin URL: $KONG_ADMIN_URL"
-echo "Portal Service URL: $PORTAL_SERVICE_URL"
-echo ""
+echo "Targeting Kong: $KONG_ADMIN"
+echo "Upstream Service: $UPSTREAM_URL"
 
-# Wait for Kong to be ready
-echo "1. Waiting for Kong to be ready..."
-until curl -s "$KONG_ADMIN_URL" > /dev/null; do
-    echo "   Kong is not ready yet, waiting..."
+# 1. Wait for Kong
+echo "Waiting for Kong..."
+until curl -s -f "$KONG_ADMIN" > /dev/null; do
     sleep 2
 done
-echo "   ✅ Kong is ready!"
-echo ""
+echo "Kong is ready."
 
-# Step 1: Register Portal Service
-echo "2. Registering Portal Service..."
-PORTAL_SERVICE=$(curl -s -X POST "$KONG_ADMIN_URL/services/" \
-    --data "name=portal-service" \
-    --data "url=$PORTAL_SERVICE_URL")
+# 2. Configure Service (Idempotent PUT)
+echo "Configuring Service..."
+curl -s -X PUT "$KONG_ADMIN/services/portal-service" \
+    --data "url=$UPSTREAM_URL" > /dev/null
 
-PORTAL_SERVICE_ID=$(echo "$PORTAL_SERVICE" | jq -r '.id')
-echo "   ✅ Portal Service registered (ID: $PORTAL_SERVICE_ID)"
-echo ""
+# 3. Configure Routes (Idempotent PUT)
 
-# Step 2: Create route for auth endpoints (public, no authentication)
-echo "3. Creating route for auth endpoints (public)..."
-AUTH_ROUTE=$(curl -s -X POST "$KONG_ADMIN_URL/services/portal-service/routes" \
-    --data "name=portal-auth-route" \
+# Route A: Public Auth (No plugins)
+echo "Configuring Route: Public Auth..."
+curl -s -X PUT "$KONG_ADMIN/services/portal-service/routes/portal-auth-route" \
     --data "paths[]=/api/v1/auth" \
-    --data "strip_path=false")
+    --data "strip_path=false" > /dev/null
 
-AUTH_ROUTE_ID=$(echo "$AUTH_ROUTE" | jq -r '.id')
-echo "   ✅ Auth route created (ID: $AUTH_ROUTE_ID)"
-echo "      Access: http://localhost:8000/api/v1/auth/*"
-echo ""
-
-# Step 3: Create route for user management (requires authentication)
-echo "4. Creating route for user management (authenticated)..."
-USERS_ROUTE=$(curl -s -X POST "$KONG_ADMIN_URL/services/portal-service/routes" \
-    --data "name=portal-users-route" \
+# Route B: Protected Users (Will have plugins)
+echo "Configuring Route: Protected Users..."
+# We retrieve the ID because we need it to manage the plugin cleanly
+PROTECTED_ROUTE_ID=$(curl -s -X PUT "$KONG_ADMIN/services/portal-service/routes/portal-users-route" \
     --data "paths[]=/api/v1/users" \
     --data "paths[]=/api/v1/memberships" \
     --data "paths[]=/api/v1/tenants" \
-    --data "strip_path=false")
+    --data "strip_path=false" | jq -r .id)
 
-USERS_ROUTE_ID=$(echo "$USERS_ROUTE" | jq -r '.id')
-echo "   ✅ User management route created (ID: $USERS_ROUTE_ID)"
-echo ""
-
-# Step 5: Add pre-function plugin (introspection with header security)
-echo "5. Adding pre-function plugin (phantom token validation with header security)..."
-
+# 4. Lua Logic for Phantom Token
 LUA_CODE='
 local http = require "resty.http"
 local cjson = require "cjson"
 
--- SECURITY: Strip any client-provided authentication headers to prevent spoofing
--- This must happen BEFORE introspection to ensure clients cannot fake their identity
-kong.service.request.clear_header("X-Tenant-ID")
-kong.service.request.clear_header("X-User-ID")
-kong.service.request.clear_header("X-Role-ID")
-kong.service.request.clear_header("X-Role-Name")
-kong.service.request.clear_header("X-Permissions")
-kong.service.request.clear_header("X-Authenticated")
+local LOG_PREFIX = "[PhantomAuth] "
+local INTROSPECT_URL = "'$UPSTREAM_URL'/api/v1/auth/introspect"
 
--- Get auth header from client
-local auth_header = kong.request.get_header("Authorization")
-if not auth_header then
-  return kong.response.exit(401, { message = "Missing Authorization header" })
+-- 1. Security: Sanitize incoming headers to prevent spoofing
+local headers_to_clear = {"X-Tenant-ID", "X-User-ID", "X-Role-ID", "X-Role-Name", "X-Permissions", "X-Authenticated"}
+for _, h in ipairs(headers_to_clear) do
+    kong.service.request.clear_header(h)
 end
 
--- Call introspection endpoint
+-- 2. Check for Token
+local auth_header = kong.request.get_header("Authorization")
+if not auth_header then
+    kong.log.warn(LOG_PREFIX, "Request denied: Missing Authorization header")
+    return kong.response.exit(401, { message = "Missing Authorization header" })
+end
+
+-- 3. Perform Introspection
 local httpc = http.new()
 httpc:set_timeout(5000)
 
-local res, err = httpc:request_uri("http://172.19.0.1:3000/api/v1/auth/introspect", {
-  method = "POST",
-  headers = {
-    ["Authorization"] = auth_header,
-    ["Content-Type"] = "application/json",
-  },
+kong.log.debug(LOG_PREFIX, "Introspecting token with: ", INTROSPECT_URL)
+local start_time = kong.request.get_start_time()
+
+local res, err = httpc:request_uri(INTROSPECT_URL, {
+    method = "POST",
+    headers = { ["Authorization"] = auth_header, ["Content-Type"] = "application/json" },
 })
 
+-- Calculate latency
+local duration = (kong.request.get_start_time() - start_time)
+kong.log.debug(LOG_PREFIX, "Introspection took: ", duration, "ms")
+
+-- 4. Handle Network Errors
 if not res then
-  kong.log.err("Introspection failed: ", err)
-  return kong.response.exit(503, { message = "Authentication service unavailable" })
+    kong.log.err(LOG_PREFIX, "Introspection Connection Failed: ", err)
+    return kong.response.exit(503, { message = "Auth Service Unavailable" })
 end
 
+-- 5. Handle Logic Errors
 if res.status ~= 200 then
-  kong.log.warn("Introspection returned status: ", res.status)
-  return kong.response.exit(401, { message = "Invalid or expired token" })
+    kong.log.warn(LOG_PREFIX, "Token rejected. Upstream status: ", res.status)
+    return kong.response.exit(401, { message = "Invalid or expired token" })
 end
 
--- Parse response
-local body = cjson.decode(res.body)
+-- 6. Parse Response
+local status, body = pcall(cjson.decode, res.body)
+if not status then
+    kong.log.err(LOG_PREFIX, "Failed to parse JSON from auth service")
+    return kong.response.exit(500, { message = "Auth Service Error" })
+end
+
 if not body.active then
-  kong.log.info("Token is not active")
-  return kong.response.exit(401, { message = "Token is not active" })
+    kong.log.info(LOG_PREFIX, "Token is valid syntax but marked inactive")
+    return kong.response.exit(401, { message = "Token is not active" })
 end
 
--- Remove Authorization header (prevent spoofing)
-kong.service.request.clear_header("Authorization")
+-- 7. Header Injection
+kong.service.request.clear_header("Authorization") -- Hide token from upstream
 
--- Inject headers from introspection response
-local tenant_id = res.headers["X-Tenant-ID"] or tostring(body.tenant_id or "")
-local user_id = res.headers["X-User-ID"] or tostring(body.user_id or "")
-local permissions = res.headers["X-Permissions"] or ""
-local role_name = res.headers["X-Role-Name"] or body.role_name or ""
+local safe_headers = {
+    ["X-Tenant-ID"]   = res.headers["X-Tenant-ID"] or tostring(body.tenant_id or ""),
+    ["X-User-ID"]     = res.headers["X-User-ID"] or tostring(body.user_id or ""),
+    ["X-Role-Name"]   = res.headers["X-Role-Name"] or body.role_name or "",
+    ["X-Authenticated"] = "true"
+}
 
-kong.service.request.set_header("X-Tenant-ID", tenant_id)
-kong.service.request.set_header("X-User-ID", user_id)
-kong.service.request.set_header("X-Role-ID", res.headers["X-Role-ID"] or "")
-kong.service.request.set_header("X-Role-Name", role_name)
-kong.service.request.set_header("X-Permissions", permissions)
-kong.service.request.set_header("X-Authenticated", "true")
+for k, v in pairs(safe_headers) do
+    kong.service.request.set_header(k, v)
+end
 
-kong.log.info("Authenticated user_id=", user_id, " tenant_id=", tenant_id, " role=", role_name)
+kong.log.notice(LOG_PREFIX, "Access Granted | User: ", safe_headers["X-User-ID"], " | Role: ", safe_headers["X-Role-Name"])
 '
 
-curl -s -X POST "$KONG_ADMIN_URL/routes/$USERS_ROUTE_ID/plugins" \
+# 5. Apply Plugin
+# Strategy: Delete existing plugin on this route (to ensure code update) then create new
+echo "Applying Introspection Plugin..."
+
+# Find plugin ID if it exists
+PLUGIN_ID=$(curl -s "$KONG_ADMIN/routes/$PROTECTED_ROUTE_ID/plugins" | jq -r '.data[] | select(.name == "pre-function") | .id')
+
+if [ -n "$PLUGIN_ID" ] && [ "$PLUGIN_ID" != "null" ]; then
+    curl -s -X DELETE "$KONG_ADMIN/routes/$PROTECTED_ROUTE_ID/plugins/$PLUGIN_ID" > /dev/null
+fi
+
+# Create new plugin config
+curl -s -X POST "$KONG_ADMIN/routes/$PROTECTED_ROUTE_ID/plugins" \
     --data "name=pre-function" \
     --data-urlencode "config.access[1]=$LUA_CODE" > /dev/null
 
-echo "   ✅ Introspection plugin added"
-echo ""
-
-echo "================================"
-echo "Kong Configuration Complete!"
-echo "================================"
-echo ""
-echo "Routes configured:"
-echo "  - Public Auth:  http://localhost:8000/api/v1/auth/*"
-echo "  - Authenticated: http://localhost:8000/api/v1/users/*"
-echo "                   http://localhost:8000/api/v1/memberships/*"
-echo "                   http://localhost:8000/api/v1/tenants/*"
-echo ""
-echo "Next steps:"
-echo "  1. Login: curl -X POST http://localhost:8000/api/v1/auth/phantom-login \\"
-echo "            -d '{\"email\":\"test@test4.com\",\"password\":\"12345678\"}'"
-echo ""
-echo "  2. Test:  curl -X GET http://localhost:8000/api/v1/users/me \\"
-echo "            -H 'Authorization: Bearer <token>'"
-echo ""
+echo "Configuration Complete."
+echo "Logs can be viewed via: docker logs <kong_container_name> | grep '\[PhantomAuth\]'"

@@ -3,7 +3,6 @@ package route
 import (
 	"go-gin-clean/internal/delivery/http"
 	"go-gin-clean/internal/delivery/http/middleware"
-	"go-gin-clean/internal/gateway/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,10 +15,9 @@ func SetupRoutes(
 	authHandler *http.AuthHandler,
 	userManagementHandler *http.UserManagementHandler,
 	introspectionHandler *http.IntrospectionHandler,
-	jwtService *security.JWTService,
 ) {
-	// Setup hybrid middleware (supports both Kong headers and JWT)
-	hybridAuth := middleware.NewHybridAuthMiddleware(jwtService)
+	// Setup Kong auth middleware (reads headers injected by Kong)
+	kongAuth := middleware.NewKongAuthMiddleware()
 
 	// Setup CORS
 	router.Use(middleware.CORS())
@@ -62,7 +60,7 @@ func SetupRoutes(
 		}
 
 		profile := api.Group("/profile")
-		profile.Use(hybridAuth.RequireAuth())
+		profile.Use(kongAuth.RequireAuth())
 		{
 			profile.GET("", userHandler.Profile)
 			profile.PUT("", userHandler.UpdateProfile)
@@ -71,11 +69,11 @@ func SetupRoutes(
 		}
 
 		// ====================
-		// USER MANAGEMENT ROUTES (Hybrid Authentication)
-		// These routes support both Kong headers (when proxied) and JWT tokens (direct access)
+		// USER MANAGEMENT ROUTES (Kong Authentication)
+		// All requests must come through Kong API Gateway
 		// ====================
 		users := api.Group("/users")
-		users.Use(hybridAuth.RequireAuth())
+		users.Use(kongAuth.RequireAuth())
 		{
 			// User management - Get own profile
 			users.GET("/me", userManagementHandler.GetMyProfile)
@@ -93,7 +91,7 @@ func SetupRoutes(
 
 		// Membership management
 		memberships := api.Group("/memberships")
-		memberships.Use(hybridAuth.RequireAuth())
+		memberships.Use(kongAuth.RequireAuth())
 		{
 			memberships.POST("", userManagementHandler.AssignUserToTenant)
 			memberships.DELETE("", userManagementHandler.RemoveUserFromTenant)
@@ -102,7 +100,7 @@ func SetupRoutes(
 
 		// Tenant management
 		tenants := api.Group("/tenants")
-		tenants.Use(hybridAuth.RequireAuth())
+		tenants.Use(kongAuth.RequireAuth())
 		{
 			tenants.GET("/:id/members", userManagementHandler.GetTenantMembers)
 			tenants.GET("/:id/roles", userManagementHandler.GetTenantRoles)

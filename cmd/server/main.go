@@ -59,7 +59,7 @@ func main() {
 
 	router := gin.Default()
 
-	route.SetupRoutes(router, &container.UserHandler, &container.OauthHandler, &container.RegistrationHandler, &container.AuthHandler, &container.UserManagementHandler, &container.IntrospectionHandler, &container.JWTService)
+	route.SetupRoutes(router, &container.UserHandler, &container.OauthHandler, &container.RegistrationHandler, &container.AuthHandler, &container.UserManagementHandler, &container.IntrospectionHandler)
 
 	srv := &http.Server{
 		Addr:    cfg.Server.Address(),
