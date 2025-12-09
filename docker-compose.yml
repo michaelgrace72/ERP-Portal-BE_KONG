@@ -3,7 +3,7 @@ services:
   # PostgreSQL Database for Portal Service
   postgres:
     image: postgres:15-alpine
-    container_name: portal-postgres
+    container_name: sie-portal-be_postgres
     environment:
       POSTGRES_USER: ${DB_USER:-portal_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-portal_pass}
@@ -11,20 +11,20 @@ services:
     ports:
       - "3605:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - sie-portal-be_postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-portal_user} -d ${DB_NAME:-portal_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - portal-network
+      - sie-network
     restart: unless-stopped
 
   # PostgreSQL Database for Kong Gateway
   kong-database:
     image: postgres:15-alpine
-    container_name: kong-postgres
+    container_name: sie-kong_postgres
     environment:
       POSTGRES_USER: kong
       POSTGRES_PASSWORD: ${KONG_PG_PASSWORD:-kongpass}
@@ -32,20 +32,20 @@ services:
     ports:
       - "3609:5432"
     volumes:
-      - kong_data:/var/lib/postgresql/data
+      - sie-portal-be_kong-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U kong -d kong"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - portal-network
+      - sie-network
     restart: unless-stopped
 
   # Kong Migrations (runs once to bootstrap)
   kong-migrations:
     image: kong:ubuntu
-    container_name: kong-migrations
+    container_name: sie-kong_migrations
     command: kong migrations bootstrap
     environment:
       KONG_DATABASE: postgres
@@ -58,13 +58,13 @@ services:
       kong-database:
         condition: service_healthy
     networks:
-      - portal-network
+      - sie-network
     restart: on-failure
 
   # Kong Gateway
   kong:
     image: kong:ubuntu
-    container_name: kong-gateway
+    container_name: sie-kong_gateway
     environment:
       KONG_DATABASE: postgres
       KONG_PG_HOST: kong-database
@@ -95,31 +95,31 @@ services:
       timeout: 10s
       retries: 10
     networks:
-      - portal-network
+      - sie-network
     restart: unless-stopped
 
   # Redis Cache (for sessions and tokens)
   redis:
     image: redis:7-alpine
-    container_name: portal-redis
+    container_name: sie-portal-be_redis
     command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
     ports:
       - "3606:6379"
     volumes:
-      - redis_data:/data
+      - sie-portal-be_redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - portal-network
+      - sie-network
     restart: unless-stopped
 
   # RabbitMQ Message Broker
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: portal-rabbitmq
+    container_name: sie-portal-be_rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
@@ -127,14 +127,14 @@ services:
       - "3607:5672"     # AMQP
       - "3608:15672" # Management UI
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - sie-portal-be_rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - portal-network
+      - sie-network
     restart: unless-stopped
 
   # Portal Service Migrations
@@ -142,7 +142,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: portal-migrations
+    container_name: sie-portal-be_migrations
     # run migrations 'up' explicitly so the container executes the migrate process and exits
     command: "/app/migrate up"
     environment:
@@ -164,7 +164,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - portal-network
+      - sie-network
     restart: on-failure
 
   # Portal Service Database Seeder
@@ -172,7 +172,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: portal-seeder
+    container_name: sie-portal-be_seeder
     command: "/app/seed"
     environment:
       # Database Configuration - must match postgres container
@@ -193,7 +193,7 @@ services:
       portal-migrations:
         condition: service_completed_successfully
     networks:
-      - portal-network
+      - sie-network
     restart: on-failure
 
   # Portal Service Application
@@ -201,7 +201,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: portal-service
+    container_name: sie-portal-be
     command: /app/main
     environment:
       # Server Configuration
@@ -283,16 +283,17 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - portal-network
+      - sie-network
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  kong_data:
-  redis_data:
-  rabbitmq_data:
+  sie-portal-be_postgres-data:
+  sie-portal-be_kong-data:
+  sie-portal-be_redis-data:
+  sie-portal-be_rabbitmq-data:
 
 networks:
-  portal-network:
+  sie-network:
+    name: sie-network
     driver: bridge
 
