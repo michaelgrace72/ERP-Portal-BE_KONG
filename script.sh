@@ -62,6 +62,12 @@ build_image() {
     # Save version for deployment stage
     echo "${VERSION}" > .image_version
     echo "Built and pushed image version: ${VERSION}"
+    
+    # Copy artifact back to GitLab CI working directory for artifacts
+    if [ -n "${CI_PROJECT_DIR}" ]; then
+        cp .image_version "${CI_PROJECT_DIR}/.image_version"
+        echo "Copied .image_version to GitLab CI working directory: ${CI_PROJECT_DIR}"
+    fi
 
     docker rmi ${IMAGE_NAME} || true
     docker rmi localhost:8001/${CI_PROJECT_NAME_LOWER}:${VERSION} || true

@@ -38,43 +38,43 @@ configure_service() {
 configure_service "portal-service" "http://portal-service:3000" "/portal"
 
 # Inventory (container)
-configure_service "inventory-service" "http://sie-erp_inventory_be:3512" "/inventory"
+configure_service "sie-erp_inventory-service" "http://sie-erp_inventory_be:3512" "/inventory"
 
 # Manufacturing (container)
-configure_service "manufacturing-service" "http://sie-erp_manufacture_be:3514" "/manufacturing"
+configure_service "sie-erp_manufacture-service" "http://sie-erp_manufacture_be:3514" "/manufacturing"
 
 # General Ledger
-configure_service "general-ledger-service" "http://sie-erp_general_ledger_be:3516" "/general-ledger"
+configure_service "sie-erp_general_ledger-service" "http://sie-erp_general_ledger_be:3516" "/general-ledger"
 
 # Cash Bank
-configure_service "cash-bank-service" "http://sie-erp_cash_bank_be:3518" "/cash-bank"
+configure_service "sie-erp_cash_bank-service" "http://sie-erp_cash_bank_be:3518" "/cash-bank"
 
 # Purchase
-configure_service "purchase-service" "http://sie-erp_purchase_be:3520" "/purchase"
+configure_service "sie-erp_purchase-service" "http://sie-erp_purchase_be:3520" "/purchase"
 
 # Sales
-configure_service "sales-service" "http://sie-erp_sales_be:3522" "/sales"
+configure_service "sie-erp_sales-service" "http://sie-erp_sales_be:3522" "/sales"
 
 #Fixed Asset
-configure_service "fixed-asset-service" "http://sie-erp_fixed_asset_be:3524" "/fixed-asset"
+configure_service "sie-erp_fixed_asset-service" "http://sie-erp_fixed_asset_be:3524" "/fixed-asset"
 
 #Account Receivable
-configure_service "account-receivable-service" "http://sie-erp_account_receivable_be:3526" "/account-receivable"    
+configure_service "sie-erp_account_receivable-service" "http://sie-erp_account_receivable_be:3526" "/account-receivable"    
 
 #Account Payable
-configure_service "account-payable-service" "http://sie-erp_account_payable_be:3528" "/account-payable"
+configure_service "sie-erp_account_payable-service" "http://sie-erp_account_payable_be:3528" "/account-payable"
 
 # Human Resource
-configure_service "human-resource-service" "http://sie-erp_human_resource_be:3530" "/human-resource"
+configure_service "sie-erp_human_resource-service" "http://sie-erp_human_resource_be:3530" "/human-resource"
 
 # Scheduling 
-configure_service "scheduling-service" "http://sie-erp_scheduling_be:3532" "/scheduling"
+configure_service "sie-erp_scheduling-service" "http://sie-erp_scheduling_be:3532" "/scheduling"
 
 # Taxation 
-configure_service "taxation-service" "http://sie-erp_taxation_be:3534" "/taxation"
+configure_service "sie-erp_taxation-service" "http://sie-erp_taxation_be:3534" "/taxation"
 
 # General Settings (container)
-configure_service "general-settings-service" "http://sie-erp_general_settings_be:3536" "/general-settings"
+configure_service "sie-erp_general_settings-service" "http://sie-erp_general_settings_be:3536" "/general-settings"
 
 # 4. Global CORS Plugin
 echo "Configuring Global CORS..."
