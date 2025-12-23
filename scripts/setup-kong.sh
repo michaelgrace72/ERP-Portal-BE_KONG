@@ -36,7 +36,7 @@ PROTECTED_ROUTE_ID=$(curl -s -X PUT "$KONG_ADMIN/services/portal-service/routes/
     --data "paths[]=/api/v1/users" \
     --data "paths[]=/api/v1/memberships" \
     --data "paths[]=/api/v1/tenants" \
-    --data "strip_path=false" | jq -r .id)
+    --data "strip_path=false" | grep -o '"id":"[^"]*"' | head -1 | sed 's/"id":"\([^"]*\)"/\1/')
 
 # 4. Lua Logic for Phantom Token
 LUA_CODE='
@@ -121,7 +121,8 @@ kong.log.notice(LOG_PREFIX, "Access Granted | User: ", safe_headers["X-User-ID"]
 echo "Applying Introspection Plugin..."
 
 # Find plugin ID if it exists
-PLUGIN_ID=$(curl -s "$KONG_ADMIN/routes/$PROTECTED_ROUTE_ID/plugins" | jq -r '.data[] | select(.name == "pre-function") | .id')
+PLUGIN_RESPONSE=$(curl -s "$KONG_ADMIN/routes/$PROTECTED_ROUTE_ID/plugins")
+PLUGIN_ID=$(echo "$PLUGIN_RESPONSE" | grep -o '"name":"pre-function"[^}]*"id":"[^"]*"' | grep -o '"id":"[^"]*"' | sed 's/"id":"\([^"]*\)"/\1/' | head -1)
 
 if [ -n "$PLUGIN_ID" ] && [ "$PLUGIN_ID" != "null" ]; then
     curl -s -X DELETE "$KONG_ADMIN/routes/$PROTECTED_ROUTE_ID/plugins/$PLUGIN_ID" > /dev/null

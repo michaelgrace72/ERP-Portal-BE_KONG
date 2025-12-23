@@ -1,7 +1,7 @@
 services:
   
   # PostgreSQL Database for Kong Gateway (still containerized)
-  # Note: Portal service will use local PostgreSQL on host
+  # Note: Portal service will use local PostgreSQL on host or this container
   kong-database:
     image: postgres:15-alpine
     container_name: kong-postgres
@@ -18,6 +18,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - portal-network
+    restart: unless-stopped
+
+  # PostgreSQL Database for Portal Service (Local Dev Container)
+  portal-db:
+    image: postgres:15-alpine
+    container_name: portal-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-portal_db}
+    # ports:
+    #   - "5432:5432" # Disabled to prevent host access (use pgadmin)
+    volumes:
+      - portal_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-portal_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - portal-network
+    restart: unless-stopped
+
+  # PgAdmin for Database Management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: portal-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      portal-db:
+        condition: service_healthy
     networks:
       - portal-network
     restart: unless-stopped
@@ -127,9 +164,9 @@ services:
     # run migrations 'up' explicitly so the container executes the migrate process and exits
     command: "/app/migrate up"
     environment:
-      # Database Configuration - connects to host's PostgreSQL
-      # Use host.docker.internal to access host machine's services
-      DB_HOST: ${DB_HOST:-host.docker.internal}
+      # Database Configuration - connects to portal-db container
+      # Host machine accesses via localhost:5432
+      DB_HOST: ${DB_HOST:-portal-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -145,6 +182,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      portal-db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -161,8 +200,8 @@ services:
     container_name: portal-seeder
     command: "/app/seed"
     environment:
-      # Database Configuration - connects to host's PostgreSQL
-      DB_HOST: ${DB_HOST:-host.docker.internal}
+      # Database Configuration - connects to portal-db container
+      DB_HOST: ${DB_HOST:-portal-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -178,6 +217,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      portal-db:
+        condition: service_healthy
       portal-migrations:
         condition: service_completed_successfully
     networks:
@@ -196,8 +237,8 @@ services:
       SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
       SERVER_PORT: ${SERVER_PORT:-3000}
       
-      # Database Configuration - connects to host's PostgreSQL
-      DB_HOST: ${DB_HOST:-host.docker.internal}
+      # Database Configuration - connects to portal-db container
+      DB_HOST: ${DB_HOST:-portal-db}
       DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -256,6 +297,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      portal-db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -276,6 +319,7 @@ services:
 
 volumes:
   kong_data:
+  portal_data:
   redis_data:
   rabbitmq_data:
 

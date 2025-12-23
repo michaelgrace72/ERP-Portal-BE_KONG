@@ -9,14 +9,15 @@ help: ## Show this help message
 build: ## Build Portal service image
 	docker build -t localhost:8001/portal-be:latest .
 
-infra: ## Start infrastructure services (PostgreSQL, Kong, Redis, Konga)
-	docker compose up -d postgres kong-bootstrap kong konga redis
+infra: ## Start infrastructure services (PostgreSQL, Kong, Redis, RabbitMQ, PgAdmin)
+	docker compose -f docker-compose.local.yml up -d portal-db kong-database kong-migrations kong redis rabbitmq pgadmin
 	@echo "✅ Infrastructure started"
-	@echo "- PostgreSQL: localhost:3605"
+	@echo "- Portal DB: localhost:5432 (Internal)"
+	@echo "- PgAdmin: localhost:5050 (admin@admin.com / admin)"
 	@echo "- Kong Proxy: localhost:3600"
 	@echo "- Kong Admin: localhost:3602"
-	@echo "- Konga UI: localhost:3604"
 	@echo "- Redis: localhost:3606"
+	@echo "- RabbitMQ: localhost:3608 (UI)"
 
 blue: ## Start/deploy blue instance
 	docker compose up -d portal-be-blue
