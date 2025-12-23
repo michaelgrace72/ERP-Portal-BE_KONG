@@ -12,11 +12,17 @@ export CI_PROJECT_NAME_LOWER
 
 pull_code() {
   echo -e "\n[Pull] Pulling code from repository..."
-  cd /var/www/
+  
+  # Create parent directory structure if it doesn't exist
+  mkdir -p "/var/www/sie/${PROJECT_TYPE}"
+  
+  cd "/var/www/sie/${PROJECT_TYPE}"
+  
   if [ ! -d "${CI_PROJECT_NAME}" ]; then
     echo "Cloning project in $(pwd) ..."
-    git clone "${REPO_URL}" || { echo "Clone failed"; exit 1; }
+    git clone "${REPO_URL}" "${CI_PROJECT_NAME}" || { echo "Clone failed"; exit 1; }
   fi
+  
   cd "${PROJECT_DIR}"
   git reset --hard
   git pull origin main
