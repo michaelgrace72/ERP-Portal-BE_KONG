@@ -418,3 +418,39 @@ make install-migrate-cli
 # Run with hot reload
 air
 ```
+#### ERP Application Services (3500-3599)
+| Service | Port | Backup Port | Description |
+|---------|------|-------------|-------------|
+| Portal Frontend | 3500 | 3501 | Main portal UI |
+| Portal Backend | 3502 | 3503 | Authentication & tenant management |
+| ERP Frontend | 3510 | 3511 | Main ERP dashboard |
+| ERP Inventory | 3512 | 3513 | Inventory management service |
+| ERP Manufacture | 3514 | 3515 | Manufacturing service |
+| ERP General Ledger | 3516 | 3517 | General ledger service |
+| ERP Cash Bank | 3518 | 3519 | Cash and bank management |
+| ERP Purchase | 3520 | 3521 | Purchase order service |
+| ERP Sales | 3522 | 3523 | Sales management service |
+| ERP Fixed Asset | 3524 | 3525 | Fixed asset tracking |
+| ERP Account Receivable | 3526 | 3527 | Accounts receivable |
+| ERP Account Payable | 3528 | 3529 | Accounts payable |
+| ERP Human Resources | 3530 | 3531 | HR management |
+| ERP Scheduling | 3532 | 3533 | Production scheduling |
+| ERP Taxation | 3534 | 3535 | Tax management |
+| SCM Frontend | 3540 | - | Supply chain management UI |
+
+#### Infrastructure & Tools (3600-3699)
+| Service | Port | Protocol | Description |
+|---------|------|----------|-------------|
+| **Kong API Gateway** | 3600 | HTTP | Main API Gateway proxy (replaces default 8000) |
+| Kong Proxy SSL | 3601 | HTTPS | Kong proxy SSL endpoint |
+| Kong Admin API | 3602 | HTTP | Kong Admin API (replaces default 8001) |
+| Kong Admin SSL | 3603 | HTTPS | Kong Admin API SSL |
+| **Konga UI** | 3604 | HTTP | Kong Admin Dashboard |
+| **PostgreSQL** | 3605 | TCP | Main database server |
+| **Redis** | 3606 | TCP | Cache and session store |
+| SonarQube | 3610 | HTTP | Code quality analysis |
+| GitLab Registry | 3611 | HTTPS | Docker registry |
+| Prometheus | 3620 | HTTP | Metrics collection (future) |
+| Grafana | 3621 | HTTP | Monitoring dashboard (future) |
+| Jaeger | 3622 | HTTP | Distributed tracing (future) |
+

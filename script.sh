@@ -3,7 +3,8 @@ set -e
 
 echo -e "\nStarting CI stage: ${CI_JOB_STAGE}"
 
-PROJECT_DIR="/var/www/${CI_PROJECT_NAME}"
+PROJECT_TYPE="erp"
+PROJECT_DIR="/var/www/sie/${PROJECT_TYPE}/${CI_PROJECT_NAME}"
 REPO_URL="https://${GITLAB_PAT}@gitlab.iimlab.id/${CI_PROJECT_PATH}.git"
 CI_PROJECT_NAME_LOWER="$(echo "${CI_PROJECT_NAME}" | tr '[:upper:]' '[:lower:]')"
 

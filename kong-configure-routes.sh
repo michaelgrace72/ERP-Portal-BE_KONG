@@ -32,7 +32,7 @@ configure_service() {
 }
 
 # 3. Apply Configurations
-# Format: configure_service <service_name> <upstream_url> <route_path>
+# Format: configure_service <service_name> <upstrekm_url> <route_path>
 
 # Portal (Container)
 configure_service "portal-service" "http://portal-service:3000" "/portal"
