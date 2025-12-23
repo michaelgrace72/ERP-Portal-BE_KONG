@@ -83,10 +83,18 @@ echo "Configuring Global CORS..."
 ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-*}"
 
 # Delete existing CORS plugin if it exists
-EXISTING_CORS=$(curl -s "$KONG_ADMIN/plugins" | grep -o '"name":"cors"[^}]*"id":"[^"]*"' | grep -o '"id":"[^"]*"' | sed 's/"id":"\([^"]*\)"/\1/' | head -1)
-if [ -n "$EXISTING_CORS" ] && [ "$EXISTING_CORS" != "null" ]; then
-    echo "Removing existing CORS plugin..."
-    curl -s -X DELETE "$KONG_ADMIN/plugins/$EXISTING_CORS" > /dev/null
+# Delete existing CORS plugin if it exists - simplified logic
+EXISTING_CORS_ID=$(curl -s "$KONG_ADMIN/plugins" | grep -oE '"id":"[a-f0-9-]+","name":"cors"' | grep -oE '"id":"[a-f0-9-]+"' | cut -d'"' -f4)
+
+if [ -z "$EXISTING_CORS_ID" ]; then
+    # Fallback: sometimes the order is name then id
+    EXISTING_CORS_ID=$(curl -s "$KONG_ADMIN/plugins" | grep -oE '"name":"cors","id":"[a-f0-9-]+"' | grep -oE '"id":"[a-f0-9-]+"' | cut -d'"' -f4)
+fi
+
+if [ -n "$EXISTING_CORS_ID" ]; then
+    echo "Removing existing CORS plugin ($EXISTING_CORS_ID)..."
+    curl -s -X DELETE "$KONG_ADMIN/plugins/$EXISTING_CORS_ID"
+    sleep 1 # Wait for deletion to propagate
 fi
 
 # Configure CORS based on allowed origins
@@ -107,7 +115,11 @@ if [ "$ALLOWED_ORIGINS" = "*" ]; then
         --data "config.headers[]=Content-Type" \
         --data "config.headers[]=Authorization" \
         --data "config.headers[]=X-Refresh-Token" \
+        --data "config.headers[]=X-Tenant-ID" \
+        --data "config.headers[]=X-Auth-Token" \
         --data "config.exposed_headers[]=X-Auth-Token" \
+        --data "config.exposed_headers[]=Content-Length" \
+        --data "config.exposed_headers[]=Content-Type" \
         --data "config.credentials=true" \
         --data "config.max_age=3600" > /dev/null
 else
@@ -137,7 +149,11 @@ else
     CORS_CMD="$CORS_CMD --data \"config.headers[]=Content-Type\""
     CORS_CMD="$CORS_CMD --data \"config.headers[]=Authorization\""
     CORS_CMD="$CORS_CMD --data \"config.headers[]=X-Refresh-Token\""
+    CORS_CMD="$CORS_CMD --data \"config.headers[]=X-Tenant-ID\""
+    CORS_CMD="$CORS_CMD --data \"config.headers[]=X-Auth-Token\""
     CORS_CMD="$CORS_CMD --data \"config.exposed_headers[]=X-Auth-Token\""
+    CORS_CMD="$CORS_CMD --data \"config.exposed_headers[]=Content-Length\""
+    CORS_CMD="$CORS_CMD --data \"config.exposed_headers[]=Content-Type\""
     CORS_CMD="$CORS_CMD --data \"config.credentials=true\""
     CORS_CMD="$CORS_CMD --data \"config.max_age=3600\""
     
