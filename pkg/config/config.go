@@ -22,11 +22,12 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host        string
-	Port        int
-	Environment string
-	AppUrl      string
-	Timeout     int
+	Host           string
+	Port           int
+	Environment    string
+	AppUrl         string
+	Timeout        int
+	AllowedOrigins []string
 }
 
 type DatabaseConfig struct {
@@ -98,11 +99,12 @@ type KongConfig struct {
 func Load() (*Config, error) {
 	return &Config{
 		Server: ServerConfig{
-			Host:        getEnv("SERVER_HOST", "localhost"),
-			Port:        getEnvAsInt("SERVER_PORT", 3000),
-			Environment: getEnv("ENVIRONMENT", "development"),
-			AppUrl:      getEnv("FRONTEND_URL", "http://localhost:8080"),
-			Timeout:     getEnvAsInt("TIMEOUT", 30),
+			Host:           getEnv("SERVER_HOST", "localhost"),
+			Port:           getEnvAsInt("SERVER_PORT", 3000),
+			Environment:    getEnv("ENVIRONMENT", "development"),
+			AppUrl:         getEnv("FRONTEND_URL", "http://localhost:8080"),
+			Timeout:        getEnvAsInt("TIMEOUT", 30),
+			AllowedOrigins: utils.ParseAllowedOrigins(getEnv("ALLOWED_ORIGINS", "*")),
 		},
 		Database: DatabaseConfig{
 			Host:         getEnv("DB_HOST", "localhost"),

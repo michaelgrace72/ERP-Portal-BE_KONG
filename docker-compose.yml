@@ -261,6 +261,7 @@ services:
       
       # Environment
       APP_ENV: ${APP_ENV:-production}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
     ports:
       - "3502:3000"
     volumes:

@@ -16,6 +16,7 @@ This repository hosts the **Portal Backend Service**, the core identity and acce
 - [🚀 Key Features](#-key-features)
 - [🏗️ Architecture Overview](#️-architecture-overview)
 - [📁 Project Structure](#-project-structure)
+- [🔒 API Gateway & CORS](#-api-gateway--cors)
 - [🛠️ Environment 1: Local Development](#️-environment-1-local-development)
   - [Option A: Hybrid Mode (Recommended)](#option-a-hybrid-mode-recommended-for-coding-)
   - [Option B: Pure Docker Mode](#option-b-pure-docker-mode-secure--simulation)
@@ -152,6 +153,42 @@ go-gin-clean/
 ├── docker-compose.local.yml               # 🛠️ Local Dev Infrastructure Definition
 └── Makefile                               # ⚡ Automation Scripts
 ```
+
+---
+
+## 🔒 API Gateway & CORS
+
+This service uses **Kong Gateway** (Port 3600) as the main entry point. All CORS (Cross-Origin Resource Sharing) policies are enforced at the gateway level.
+
+### 🌐 CORS Configuration
+
+To allow your Frontend (e.g., `localhost:5052` or `app.domain.com`) to access the API:
+
+### 1. Configure `.env`
+
+Add your allowed origins to the `.env` file. You can use a specific domain or the wildcard `*`.
+
+```bash
+# Allow specific origin
+ALLOWED_ORIGINS=http://localhost:5052
+
+# Allow multiple origins
+ALLOWED_ORIGINS=http://localhost:5052,https://app.erplabiim.com
+
+# Allow all (Development only)
+ALLOWED_ORIGINS=*
+```
+
+### 2. Apply Configuration
+
+Run the configuration script to update Kong's CORS plugin dynamically:
+
+```bash
+# Windows (Git Bash) / Linux / Mac
+./scripts/kong-configure-routes.sh
+```
+
+> **Note**: This script updates the configuration instantly without restarting services.
 
 ---
 
@@ -294,6 +331,7 @@ docker-compose run --rm portal-service /app/seed
 
 # 3. Configure Kong Gateway
 ./scripts/setup-kong.sh
+./scripts/kong-configure-routes.sh
 ```
 
 ---

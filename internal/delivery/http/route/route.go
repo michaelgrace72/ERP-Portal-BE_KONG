@@ -15,12 +15,13 @@ func SetupRoutes(
 	authHandler *http.AuthHandler,
 	userManagementHandler *http.UserManagementHandler,
 	introspectionHandler *http.IntrospectionHandler,
+	allowedOrigins []string,
 ) {
 	// Setup Kong auth middleware (reads headers injected by Kong)
 	kongAuth := middleware.NewKongAuthMiddleware()
 
 	// Setup CORS
-	router.Use(middleware.CORS())
+	router.Use(middleware.CORS(allowedOrigins))
 
 	// API routes
 	api := router.Group("/api/v1")
@@ -30,21 +31,21 @@ func SetupRoutes(
 		{
 			// Legacy JWT-based login (keep for backward compatibility)
 			auth.POST("/login", userHandler.Login)
-			
+
 			// New phantom token authentication endpoints
 			auth.POST("/phantom-login", authHandler.Login)
 			auth.POST("/select-tenant", authHandler.SelectTenant)
 			auth.POST("/logout", authHandler.Logout)
 			auth.POST("/refresh", authHandler.RefreshSession)
 			auth.GET("/session", authHandler.GetSession)
-			
+
 			// Kong introspection endpoint (called by Kong to validate phantom tokens)
 			// This endpoint validates the reference token and returns session context as headers
 			auth.POST("/introspect", introspectionHandler.Introspect)
-			
+
 			// Registration
 			auth.POST("/register", registrationHandler.RegisterWithTenant)
-			
+
 			// Other auth endpoints
 			auth.POST("/refresh-token", userHandler.RefreshToken)
 			auth.POST("/verify-email", userHandler.VerifyEmail)
@@ -77,10 +78,10 @@ func SetupRoutes(
 		{
 			// User management - Get own profile
 			users.GET("/me", userManagementHandler.GetMyProfile)
-			
+
 			// Admin: Create user (for invitation)
 			users.POST("", userManagementHandler.CreateUser)
-			
+
 			// Legacy user endpoints
 			users.GET("", userHandler.GetAllUsers)
 			users.GET("/:code", userHandler.GetUserByCode)
