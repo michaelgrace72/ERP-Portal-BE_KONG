@@ -137,65 +137,6 @@ services:
       - sie-network
     restart: unless-stopped
 
-  # Portal Service Migrations
-  portal-migrations:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: sie-portal-be_migrations
-    # run migrations 'up' explicitly so the container executes the migrate process and exits
-    command: "/app/migrate up"
-    environment:
-      # Database Configuration - must match postgres container
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_NAME: ${DB_NAME:-portal_db}
-      DB_SSLMODE: ${DB_SSLMODE:-disable}
-      # These are needed for config.Load() to work properly
-      SERVER_HOST: "0.0.0.0"
-      SERVER_PORT: "3000"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: "5672"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - sie-network
-    restart: on-failure
-
-  # Portal Service Database Seeder
-  portal-seeder:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: sie-portal-be_seeder
-    command: "/app/seed"
-    environment:
-      # Database Configuration - must match postgres container
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_NAME: ${DB_NAME:-portal_db}
-      DB_SSLMODE: ${DB_SSLMODE:-disable}
-      # These are needed for config.Load() to work properly
-      SERVER_HOST: "0.0.0.0"
-      SERVER_PORT: "3000"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: "5672"
-    depends_on:
-      portal-migrations:
-        condition: service_completed_successfully
-    networks:
-      - sie-network
-    restart: on-failure
-
   # Portal Service Application
   portal-service:
     build:
@@ -273,12 +214,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      portal-seeder:
-        condition: service_completed_successfully
-      portal-migrations:
-        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
